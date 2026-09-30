@@ -7,7 +7,7 @@ The website is `site/index.html` and `site/config.js`. `setup.sql` sets up the d
 ## Launch it
 
 1. **Create the database.** Sign up at supabase.com and create a new project. Open *SQL Editor*, paste in all of `setup.sql`, and click *Run*.
-2. **Connect the site to it.** In your Supabase project, click *Connect* at the top of the page, or go to *Project Settings > Data API* for the Project URL and *Project Settings > API Keys* for the key. Copy the *Project URL* (`https://<something>.supabase.co`) and the *anon public* key (a long string starting with `eyJ`, on the *Legacy API keys* tab) into `config.js`.
+2. **Connect the site to it.** In your Supabase project, click *Connect* at the top of the page, or go to *Project Settings > Data API* for the Project URL and *Project Settings > API Keys* for the key. Copy the *Project URL* (`https://<something>.supabase.co`) and the *anon public* key (a long string starting with `eyJ`, on the *Legacy API keys* tab) into `site/config.js`.
 3. **Put the site online.** In Netlify, choose *Add new site > Import an existing project > GitHub* and pick this repository. The settings come from `netlify.toml`, so leave the build command empty. Netlify gives you a public address such as `regimentle-xyz.netlify.app`. You can rename it under *Site configuration > Change site name*. For a site that already exists, use *Site configuration > Build & deploy > Link repository* instead.
 4. **Let sign-in links come back to your site.** In Supabase, open *Authentication > URL Configuration*. Set *Site URL* to your Netlify address, and add the same address under *Redirect URLs*.
 
