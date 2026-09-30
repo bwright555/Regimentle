@@ -222,6 +222,7 @@ function activityStreak(text) {
 const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '–';
 const sq = t => t.done === true ? '🟩' : t.done === false ? '⬛' : '⬜';
 
+const siteUrl = () => location.origin + location.pathname.replace(/index\.html$/, '');
 function shareText() {
   const day = today(), tasks = day.tasks;
   const s = { done: tasks.filter(t => t.done === true).length, total: tasks.length };
@@ -235,7 +236,8 @@ function shareText() {
   }
   lines.push(`Today: ${pct(s.done, s.total)} · Career: ${pct(c.done, c.total)} (${c.done}/${c.total})`);
   const st = streak(); if (st > 1) lines.push(`⭐ ${st} perfect days in a row`);
-  if (/^https?:$/.test(location.protocol)) lines.push(location.host + location.pathname.replace(/index\.html$/, ''));
+  // full https:// address so texting and chat apps turn it into a tappable link
+  if (/^https?:$/.test(location.protocol)) lines.push(siteUrl());
   return lines.join('\n');
 }
 
@@ -410,7 +412,15 @@ $('copyBtn').onclick = () => {
     toast.textContent = 'Text selected. Press copy on your keyboard or phone to copy it.';
   };
   try {
-    navigator.clipboard.writeText(text).then(() => { toast.textContent = 'Copied. Paste it into your group chat.'; }, fallback);
+    const done = () => { toast.textContent = 'Copied. Paste it into your group chat.'; };
+    // Apps that accept rich text (email, Slack, Docs) get the address as a real link; everything else gets plain text.
+    const esc = x => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const url = siteUrl();
+    const html = esc(text).split(esc(url)).join(`<a href="${esc(url)}">${esc(url)}</a>`).replace(/\n/g, '<br>');
+    const rich = window.ClipboardItem && navigator.clipboard.write
+      ? navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })])
+      : Promise.reject();
+    rich.then(done, () => navigator.clipboard.writeText(text).then(done, fallback));
   } catch (e) { fallback(); }
   setTimeout(() => { toast.textContent = ''; }, 4000);
 };
