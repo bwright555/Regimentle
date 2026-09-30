@@ -13,7 +13,7 @@ The website is `site/index.html` and `site/config.js`. `setup.sql` sets up the d
 
 Now open your site, sign in with your email, and share the link.
 
-## Google sign-in (optional)
+## Google sign-in
 
 1. Go to console.cloud.google.com and create a project. Open *APIs & Services > OAuth consent screen*, choose *External*, and fill in the app name (Regimentle) and your email.
 2. Open *APIs & Services > Credentials > Create credentials > OAuth client ID*. Choose *Web application*.
@@ -24,5 +24,5 @@ Now open your site, sign in with your email, and share the link.
 
 ## Good to know
 
-- Supabase's built-in email sender only allows a few sign-in emails per hour. Before lots of people use the site, connect your own email provider under *Authentication > Emails > SMTP Settings*. Resend and Postmark both have free plans.
+- Sign-in is Google only. To make sure nobody can create an account by email, turn off *Authentication > Sign In / Providers > Email* in Supabase.
 - Anyone can use the site without signing in. Their progress is saved in their browser, and it moves to their account the first time they sign in.
