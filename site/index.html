@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Regimentle</title>
+<meta name="description" content="Score your daily regimen like Wordle and share your results with friends.">
+<meta property="og:title" content="Regimentle">
+<meta property="og:description" content="Score your daily regimen like Wordle and share your results with friends.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='7' height='7' fill='%233f9a5b'/><rect x='9' width='7' height='7' fill='%233f9a5b'/><rect y='9' width='7' height='7' fill='%233a4150'/><rect x='9' y='9' width='7' height='7' fill='%233f9a5b'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column like a game board. Today's tiles on top, the task list as rows, the share card last. */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5d6779;
+  --line: #d4dae3;
+  --hit: #3f9a5b;
+  --miss: #3a4150;
+  --open: #e0a526;
+  --accent: #2f5fd0;
+  --display: "Archivo", "Arial Black", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151c; --surface: #1b2029; --fg: #e8ecf3; --muted: #97a1b3; --line: #2e3542;
+  --hit: #4fae6b; --miss: #4a5263; --open: #e8b23c; --accent: #7aa0ff; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151c; --surface: #1b2029; --fg: #e8ecf3; --muted: #97a1b3; --line: #2e3542;
+  --hit: #4fae6b; --miss: #4a5263; --open: #e8b23c; --accent: #7aa0ff; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); padding-inline: 16px; padding-block: 24px 48px; }
+main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+header { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+h1 { font: 800 clamp(2rem, 8vw, 2.6rem)/1 var(--display); font-stretch: 125%; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+.date { color: var(--muted); font-size: .95rem; }
+.label { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0; }
+
+.board { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; min-height: 44px; }
+.tile { width: 40px; height: 40px; border: 2px solid var(--line); background: var(--surface); display: grid; place-items: center;
+  font: 800 1rem var(--display); color: #fff; transition: background .25s, border-color .25s, transform .25s; }
+.tile.hit { background: var(--hit); border-color: var(--hit); }
+.tile.miss { background: var(--miss); border-color: var(--miss); }
+.tile.pop { animation: pop .3s ease; }
+@keyframes pop { 50% { transform: scale(1.12); } }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.stat b { display: block; font: 800 1.6rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.stat span { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+section { display: flex; flex-direction: column; gap: 10px; }
+.add { display: flex; gap: 8px; }
+.add input { flex: 1; min-width: 0; font: inherit; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 4px; }
+.add input:focus { outline: none; border-color: var(--accent); }
+button { font: 600 .95rem var(--body); cursor: pointer; border-radius: 4px; border: 2px solid transparent; padding: 10px 14px; }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.primary { background: var(--accent); color: var(--bg); }
+.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+.ghost:hover { border-color: var(--muted); }
+
+ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+li { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 8px 8px 8px 12px; }
+li .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
+.mark { width: 36px; height: 36px; padding: 0; font-size: 1.1rem; line-height: 1; border: 2px solid var(--line); background: transparent; color: var(--muted); }
+.mark[aria-pressed="true"].yes { background: var(--hit); border-color: var(--hit); color: #fff; }
+.mark[aria-pressed="true"].no { background: var(--miss); border-color: var(--miss); color: #fff; }
+.del { background: none; border: none; color: var(--muted); padding: 6px; font-size: 1.1rem; }
+.del:hover { color: var(--fg); }
+.hint { color: var(--muted); font-size: .9rem; margin: 0; }
+.hint.warn { color: var(--open); }
+
+.share { background: var(--surface); border: 2px solid var(--fg); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+pre { margin: 0; font: 500 .9rem/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row button { flex: 1; }
+.toast { color: var(--hit); font-weight: 600; font-size: .9rem; min-height: 1.4em; margin: 0; }
+
+.flame { font-size: .8rem; color: var(--open); font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-block; }
+.sync { margin: 4px 0 0; font-size: .8rem; color: var(--muted); }
+.sync::before { content: ""; display: inline-block; vertical-align: middle; margin: -2px 6px 0 0; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.sync.ok::before { background: var(--hit); }
+.sync.warn { color: var(--open); }
+.sync.warn::before { background: var(--open); }
+.history li { font-size: .9rem; padding: 8px 12px; }
+.history .d { flex: 1; color: var(--muted); }
+.history .mini { font-size: .8rem; letter-spacing: -1px; }
+.history .s { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 3.5em; text-align: right; }
+details summary { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.pop { animation: none; } }
+html { color-scheme: light; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+.account { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.account p { margin: 0; font-size: .9rem; }
+.account .who { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.google { display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg); color: var(--fg); border-color: var(--line); }
+.google:hover { border-color: var(--muted); }
+.account .or { text-align: center; color: var(--muted); font-size: .8rem; }
+.account button.link { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; font-weight: 500; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</body>
+</html>
+<script src="config.js"></script>
+</body>
+</html>
+</head>
+<body>
+
+<main>
+  <header>
+    <h1>Regimentle</h1>
+    <div class="date" id="date"></div>
+    <p class="sync" id="sync" aria-live="polite">Saved on this device</p>
+  </header>
+
+  <section class="account" id="account">
+    <button class="google" id="googleBtn" type="button"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>Continue with Google</button>
+    <p class="or" id="orLine">or get a sign-in link by email</p>
+    <form class="add" id="signInForm">
+      <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required aria-label="Email address">
+      <button class="primary" type="submit">Sign in</button>
+    </form>
+    <p class="hint" id="signInHint">Sign in to keep your streaks safe and use Regimentle on any device. No password needed.</p>
+    <div class="who" id="who" hidden>
+      <p>Signed in as <b id="whoEmail"></b></p>
+      <button class="link" id="signOut" type="button">Sign out</button>
+    </div>
+  </section>
+
+  <div class="board" id="board" aria-label="Today's tiles"></div>
+
+  <div class="stats">
+    <div class="stat"><b id="sToday">0/0</b><span>Today</span></div>
+    <div class="stat"><b id="sCareer">–</b><span>Career</span></div>
+    <div class="stat"><b id="sStreak">0</b><span>Perfect days</span></div>
+  </div>
+
+  <section>
+    <p class="label">Your daily regimen</p>
+    <form class="add" id="addForm">
+      <input id="newTask" placeholder="Add a daily activity" autocomplete="off" maxlength="80">
+      <button class="primary" type="submit">Add</button>
+    </form>
+    <p class="hint" id="exampleNote" hidden>These are example activities. <button class="ghost" id="clearEx" type="button" style="padding:2px 8px">Clear them</button></p>
+    <ul id="list"></ul>
+    <p class="hint" id="listHint"></p>
+  </section>
+
+  <section class="share">
+    <p class="label">Share with friends</p>
+    <pre id="shareText"></pre>
+    <div class="row">
+      <button class="primary" id="copyBtn" type="button">Copy results</button>
+    </div>
+    <p class="toast" id="toast" aria-live="polite"></p>
+  </section>
+
+  <section>
+    <details id="histWrap">
+      <summary class="label">Past days</summary>
+      <ul class="history" id="history" style="margin-top:10px"></ul>
+    </details>
+  </section>
+</main>
+
+<script>
+const KEY = 'regimentle.v1';
+const $ = id => document.getElementById(id);
+const todayKey = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const EXAMPLES = ['Work out', 'Drink 8 glasses of water', 'Read 20 pages', 'Meditate 10 minutes'];
+
+let state;
+function load() {
+  try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
+  if (!state || !state.days) state = { days: {} };
+  ensureToday();
+}
+function ensureToday() {
+  const t = todayKey();
+  if (!state.days[t]) {
+    const past = Object.keys(state.days).sort();
+    const prev = past.length ? state.days[past[past.length - 1]] : null;
+    state.days[t] = !prev
+      ? { tasks: EXAMPLES.map((text, i) => ({ text, done: i < 2 ? true : i === 2 ? false : null })), example: true }
+      : { tasks: prev.example ? [] : prev.tasks.map(x => ({ text: x.text, done: null })), example: false };
+  }
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+const today = () => state.days[todayKey()];
+
+function dayScore(day) {
+  const real = day.example ? [] : day.tasks;
+  return { done: real.filter(t => t.done === true).length, total: real.length };
+}
+function career() {
+  let done = 0, total = 0;
+  for (const d of Object.values(state.days)) { const s = dayScore(d); done += s.done; total += s.total; }
+  return { done, total };
+}
+function dayNumber() {
+  return Object.keys(state.days).filter(k => dayScore(state.days[k]).total > 0 || k === todayKey()).sort().indexOf(todayKey()) + 1;
+}
+function streak() {
+  // consecutive days, ending today or yesterday, where every task was done
+  let n = 0; const d = new Date();
+  const k = x => x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
+  const perfect = key => { const day = state.days[key]; if (!day) return false; const s = dayScore(day); return s.total > 0 && s.done === s.total; };
+  if (!perfect(k(d))) d.setDate(d.getDate() - 1);
+  while (perfect(k(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+function activityStreak(text) {
+  // consecutive days this activity was marked done, counting back from today (today only counts once it is done)
+  let n = 0; const d = new Date();
+  const k = x => x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
+  const doneOn = key => { const day = state.days[key]; return !!day && !day.example && day.tasks.some(t => t.text === text && t.done === true); };
+  if (!doneOn(k(d))) d.setDate(d.getDate() - 1);
+  while (doneOn(k(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '–';
+const sq = t => t.done === true ? '🟩' : t.done === false ? '⬛' : '⬜';
+
+function shareText() {
+  const day = today(), tasks = day.tasks;
+  const s = { done: tasks.filter(t => t.done === true).length, total: tasks.length };
+  const c = career();
+  if (day.example) { c.done += s.done; c.total += s.total; }
+  const lines = [`Regimentle #${dayNumber()} ${s.done}/${s.total}`, ''];
+  if (tasks.length) {
+    lines.push(tasks.map(sq).join(''), '');
+    tasks.forEach(t => { const n = day.example ? 0 : activityStreak(t.text); lines.push(`${sq(t)} ${t.text}${n > 1 ? ` 🔥${n}` : ''}`); });
+    lines.push('');
+  }
+  lines.push(`Today: ${pct(s.done, s.total)} · Career: ${pct(c.done, c.total)} (${c.done}/${c.total})`);
+  const st = streak(); if (st > 1) lines.push(`⭐ ${st} perfect days in a row`);
+  if (/^https?:$/.test(location.protocol)) lines.push(location.host + location.pathname.replace(/index\.html$/, ''));
+  return lines.join('\n');
+}
+
+let lastTiles = '';
+function render() {
+  const day = today(), tasks = day.tasks;
+  $('date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const board = $('board'), tileSig = tasks.map(t => t.done).join();
+  board.innerHTML = '';
+  tasks.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'tile' + (t.done === true ? ' hit' : t.done === false ? ' miss' : '');
+    el.textContent = t.done === true ? '✓' : t.done === false ? '✕' : '';
+    if (lastTiles && lastTiles.split(',')[i] !== String(t.done)) el.classList.add('pop');
+    board.appendChild(el);
+  });
+  lastTiles = tileSig;
+
+  const done = tasks.filter(t => t.done === true).length;
+  $('sToday').textContent = `${done}/${tasks.length}`;
+  const c = career(); if (day.example) { c.done += done; c.total += tasks.length; }
+  $('sCareer').textContent = pct(c.done, c.total);
+  $('sStreak').textContent = streak();
+
+  const list = $('list'); list.innerHTML = '';
+  tasks.forEach((t, i) => {
+    const li = document.createElement('li');
+    if (t.done === true) li.className = 'hit';
+    const name = document.createElement('span'); name.className = 'name'; name.textContent = t.text;
+    const n = day.example ? 0 : activityStreak(t.text);
+    if (n > 1) { const f = document.createElement('span'); f.className = 'flame'; f.textContent = `🔥${n}`; f.title = `Done ${n} days in a row`; name.append(' ', f); }
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
+    yes.setAttribute('aria-label', `Mark "${t.text}" done`); yes.setAttribute('aria-pressed', t.done === true);
+    yes.onclick = () => { t.done = t.done === true ? null : true; commit(); };
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'mark no'; no.textContent = '✕';
+    no.setAttribute('aria-label', `Mark "${t.text}" not done`); no.setAttribute('aria-pressed', t.done === false);
+    no.onclick = () => { t.done = t.done === false ? null : false; commit(); };
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+    del.setAttribute('aria-label', `Remove "${t.text}" from your regimen`);
+    del.onclick = () => { tasks.splice(i, 1); commit(); };
+    li.append(name, yes, no, del);
+    list.appendChild(li);
+  });
+
+  $('exampleNote').hidden = !day.example;
+  const open = tasks.filter(t => t.done === null).length;
+  const hint = $('listHint');
+  hint.className = 'hint' + (open ? ' warn' : '');
+  hint.textContent = !tasks.length ? 'Add the activities you want to do every day. They carry over to each new day, and you mark each one ✓ or ✕.'
+    : open ? `${open} activit${open > 1 ? 'ies' : 'y'} still unmarked today. Unmarked ones count as not done.`
+    : 'Everything is marked for today. Copy your results below.';
+
+  $('shareText').textContent = shareText();
+  renderHistory();
+}
+
+function renderHistory() {
+  const ul = $('history'); ul.innerHTML = '';
+  const keys = Object.keys(state.days).filter(k => k !== todayKey() && dayScore(state.days[k]).total).sort().reverse();
+  $('histWrap').hidden = !keys.length;
+  keys.forEach(k => {
+    const d = state.days[k], s = dayScore(d);
+    const li = document.createElement('li');
+    const date = new Date(k + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    li.innerHTML = '<span class="d"></span><span class="mini"></span><span class="s"></span>';
+    li.children[0].textContent = date;
+    li.children[1].textContent = d.tasks.map(sq).join('');
+    li.children[2].textContent = `${s.done}/${s.total}`;
+    ul.appendChild(li);
+  });
+}
+
+
+// ---- Account sync (Supabase). Each signed-in person has one row per day in
+// regimen_days, readable and writable only by them (see setup.sql).
+const CFG = window.REGIMENTLE_CONFIG || {};
+let sb = null, user = null, dirty = new Set(), writeTimer = null, writing = false;
+function setSync(text, cls) { const el = $('sync'); el.textContent = text; el.className = 'sync' + (cls ? ' ' + cls : ''); }
+function showAccount() {
+  $('signInForm').hidden = !!user; $('signInHint').hidden = !!user; $('who').hidden = !user;
+  $('googleBtn').hidden = !!user; $('orLine').hidden = !!user;
+  if (user) $('whoEmail').textContent = user.email || '';
+  if (!user) setSync('Saved on this device only. Sign in to keep your progress.', 'warn');
+}
+function queueWrite(days) {
+  if (!user) return;
+  days.forEach(d => dirty.add(d));
+  setSync('Saving…');
+  clearTimeout(writeTimer);
+  writeTimer = setTimeout(flush, 600);
+}
+async function flush() {
+  writeTimer = null;
+  if (writing) { writeTimer = setTimeout(flush, 300); return; }
+  writing = true;
+  try {
+    const keys = [...dirty]; dirty.clear();
+    const up = [], del = [];
+    keys.forEach(k => { const d = state.days[k]; (d && !d.example && d.tasks.length ? up : del).push(k); });
+    if (up.length) {
+      const { error } = await sb.from('regimen_days').upsert(up.map(k => ({ user_id: user.id, day: k, tasks: state.days[k].tasks, updated_at: new Date().toISOString() })));
+      if (error) throw error;
+    }
+    if (del.length) {
+      const { error } = await sb.from('regimen_days').delete().eq('user_id', user.id).in('day', del);
+      if (error) throw error;
+    }
+    setSync('Saved to your account', 'ok');
+  } catch (e) {
+    console.error(e);
+    setSync('Could not reach your account. Your progress is kept on this device and will save on your next change.', 'warn');
+  } finally { writing = false; }
+}
+async function pull() {
+  if (!user || writeTimer || writing) return;
+  const { data, error } = await sb.from('regimen_days').select('day,tasks').eq('user_id', user.id);
+  if (error) { console.error(error); setSync('Could not load your account. Showing what is saved on this device.', 'warn'); return; }
+  const server = {};
+  data.forEach(r => { server[r.day] = { tasks: r.tasks, example: false }; });
+  // days tracked on this device that the account doesn't have yet get uploaded
+  const localOnly = Object.keys(state.days).filter(k => !server[k] && !state.days[k].example && state.days[k].tasks.some(t => t.done !== null) );
+  const ex = today() && today().example ? today() : null;
+  localOnly.forEach(k => { server[k] = state.days[k]; });
+  state.days = server;
+  if (ex && !server[todayKey()]) state.days[todayKey()] = ex;
+  ensureToday(); save(); render();
+  if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
+}
+function connect() {
+  if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || !window.supabase) {
+    $('account').hidden = true;
+    setSync('Saved on this device', '');
+    return;
+  }
+  sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+  sb.auth.onAuthStateChange((event, session) => {
+    const next = session ? session.user : null;
+    const changed = (next && next.id) !== (user && user.id);
+    user = next; showAccount();
+    if (changed && user) { setSync('Loading your saved progress…'); pull(); }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
+}
+$('signInForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('email').value.trim(); if (!email) return;
+  const hint = $('signInHint'); hint.hidden = false;
+  hint.textContent = 'Sending your sign-in link…';
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  hint.className = 'hint' + (error ? ' warn' : '');
+  hint.textContent = error ? `Could not send the link: ${error.message}` : `Check ${email} for a sign-in link. Open it on this device to finish signing in.`;
+});
+$('googleBtn').onclick = async () => {
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+  if (error) { const hint = $('signInHint'); hint.hidden = false; hint.className = 'hint warn'; hint.textContent = `Could not start Google sign-in: ${error.message}`; }
+};
+$('signOut').onclick = async () => {
+  await sb.auth.signOut();
+  // keep this device's copy so the page still works, but stop treating it as account data
+  user = null; showAccount();
+};
+
+function commit() { save(); render(); queueWrite([todayKey()]); }
+
+$('addForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('newTask').value.trim(); if (!v) return;
+  const day = today();
+  if (day.example) { day.tasks = []; day.example = false; }
+  day.tasks.push({ text: v, done: null });
+  $('newTask').value = '';
+  commit();
+});
+$('clearEx').onclick = () => { const d = today(); d.tasks = []; d.example = false; commit(); $('newTask').focus(); };
+
+$('copyBtn').onclick = () => {
+  const text = shareText(), toast = $('toast');
+  const fallback = () => {
+    const r = document.createRange(); r.selectNodeContents($('shareText'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    toast.textContent = 'Text selected. Press copy on your keyboard or phone to copy it.';
+  };
+  try {
+    navigator.clipboard.writeText(text).then(() => { toast.textContent = 'Copied. Paste it into your group chat.'; }, fallback);
+  } catch (e) { fallback(); }
+  setTimeout(() => { toast.textContent = ''; }, 4000);
+};
+
+// roll over to a new day if the page stays open past midnight
+let current = todayKey();
+setInterval(() => { if (todayKey() !== current) { current = todayKey(); ensureToday(); render(); } }, 60000);
+
+load(); render();
+connect();
+</script>
+</body>
+</html>
