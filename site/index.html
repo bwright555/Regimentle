@@ -223,9 +223,6 @@ function career() {
   for (const d of Object.values(state.days)) { const s = dayScore(d); done += s.done; total += s.total; }
   return { done, total };
 }
-function dayNumber() {
-  return Object.keys(state.days).filter(k => dayScore(state.days[k]).total > 0 || k === todayKey()).sort().indexOf(todayKey()) + 1;
-}
 function streak() {
   // consecutive days, ending today or yesterday, where every task was done
   let n = 0; const d = new Date();
@@ -253,7 +250,7 @@ function shareText() {
   const s = { done: tasks.filter(t => t.done === true).length, total: tasks.length };
   const c = career();
   if (day.example) { c.done += s.done; c.total += s.total; }
-  const lines = [`Habitle #${dayNumber()} ${s.done}/${s.total}`, ''];
+  const lines = [`Habitle ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${s.done}/${s.total}`, ''];
   if (tasks.length) {
     lines.push(tasks.map(sq).join(''), '');
     tasks.forEach(t => { const n = day.example ? 0 : activityStreak(t.text); lines.push(`${sq(t)} ${t.text}${n > 1 ? ` 🔥${n}` : ''}`); });
