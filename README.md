@@ -24,5 +24,6 @@ Now open your site, sign in with your email, and share the link.
 
 ## Good to know
 
-- Sign-in is Google only. To make sure nobody can create an account by email, turn off *Authentication > Sign In / Providers > Email* in Supabase.
+- People can sign in with Google or with an email and password. For email and password, turn on *Authentication > Sign In / Providers > Email*. *Confirm email* makes new users click a link before they can sign in. Supabase's built-in email sender only sends a few emails per hour, so leave *Confirm email* off until you connect your own email provider under *Authentication > Emails > SMTP Settings*. Password reset emails go through the same sender.
+- In *Authentication > URL Configuration*, keep your site's address in *Site URL* and *Redirect URLs*. Confirmation and reset links come back to it.
 - Anyone can use the site without signing in. Their progress is saved in their browser, and it moves to their account the first time they sign in.

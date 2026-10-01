@@ -101,6 +101,12 @@ body { margin: 0; }
 .account .who { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .google { display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg); color: var(--fg); border-color: var(--line); }
 .google:hover { border-color: var(--muted); }
+.account .or { text-align: center; color: var(--muted); font-size: .8rem; }
+.account .pw { display: flex; flex-direction: column; gap: 8px; }
+.account .pw input { font: inherit; padding: 10px 12px; border: 2px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 4px; min-width: 0; }
+.account .pw input:focus { outline: none; border-color: var(--accent); }
+.account .signin { display: flex; flex-direction: column; gap: 8px; }
+.account .signin > .link { align-self: center; font-size: .85rem; }
 .account button.link { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; font-weight: 500; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -121,7 +127,24 @@ body { margin: 0; }
 
   <section class="account" id="account">
     <button class="google" id="googleBtn" type="button"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>Continue with Google</button>
-    <p class="hint" id="signInHint">Sign in with Google to keep your streaks safe and use Regimentle on any device.</p>
+    <div class="signin" id="pwBox">
+      <p class="or">or use your email and a password</p>
+      <form class="pw" id="pwForm">
+        <input id="pwEmail" type="email" placeholder="Email" autocomplete="email" required aria-label="Email">
+        <input id="pwPass" type="password" placeholder="Password (at least 6 characters)" autocomplete="current-password" minlength="6" required aria-label="Password">
+        <div class="row">
+          <button class="primary" type="submit" id="pwSignIn">Sign in</button>
+          <button class="ghost" type="button" id="pwSignUp">Create account</button>
+        </div>
+      </form>
+      <button class="link" id="pwForgot" type="button">Forgot your password?</button>
+    </div>
+    <form class="pw" id="newPwForm" hidden>
+      <p>Choose a new password for your account.</p>
+      <input id="newPass" type="password" placeholder="New password (at least 6 characters)" autocomplete="new-password" minlength="6" required aria-label="New password">
+      <button class="primary" type="submit">Save new password</button>
+    </form>
+    <p class="hint" id="signInHint">Sign in to keep your streaks safe and use Regimentle on any device.</p>
     <div class="who" id="who" hidden>
       <p>Signed in as <b id="whoEmail"></b></p>
       <button class="link" id="signOut" type="button">Sign out</button>
@@ -318,7 +341,7 @@ const CFG = window.REGIMENTLE_CONFIG || {};
 let sb = null, user = null, dirty = new Set(), writeTimer = null, writing = false;
 function setSync(text, cls) { const el = $('sync'); el.textContent = text; el.className = 'sync' + (cls ? ' ' + cls : ''); }
 function showAccount() {
-  $('signInHint').hidden = !!user; $('who').hidden = !user; $('googleBtn').hidden = !!user;
+  $('signInHint').hidden = !!user; $('who').hidden = !user; $('googleBtn').hidden = !!user; $('pwBox').hidden = !!user;
   if (user) $('whoEmail').textContent = user.email || '';
   if (!user) setSync('Saved on this device only. Sign in to keep your progress.', 'warn');
 }
@@ -374,6 +397,7 @@ function connect() {
   }
   sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
   sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') { $('newPwForm').hidden = false; $('newPass').focus(); }
     const next = session ? session.user : null;
     const changed = (next && next.id) !== (user && user.id);
     user = next; showAccount();
@@ -385,6 +409,44 @@ $('googleBtn').onclick = async () => {
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
   if (error) { const hint = $('signInHint'); hint.hidden = false; hint.className = 'hint warn'; hint.textContent = `Could not start Google sign-in: ${error.message}`; }
 };
+// ---- Email and password
+function authHint(text, warn) { const h = $('signInHint'); h.hidden = false; h.className = 'hint' + (warn ? ' warn' : ''); h.textContent = text; }
+function pwFields() {
+  const email = $('pwEmail').value.trim(), password = $('pwPass').value;
+  if (!$('pwForm').reportValidity()) return null;
+  return { email, password };
+}
+$('pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = pwFields(); if (!f) return;
+  authHint('Signing in…');
+  const { error } = await sb.auth.signInWithPassword(f);
+  if (error) authHint(/invalid login/i.test(error.message) ? 'That email and password don\'t match. Check them, or tap Create account if you\'re new.'
+    : /not confirmed/i.test(error.message) ? 'Confirm your email first. Look for the message we sent when you created your account.'
+    : `Could not sign in: ${error.message}`, true);
+  else $('pwPass').value = '';
+});
+$('pwSignUp').onclick = async () => {
+  const f = pwFields(); if (!f) return;
+  authHint('Creating your account…');
+  const { data, error } = await sb.auth.signUp({ ...f, options: { emailRedirectTo: location.origin + location.pathname } });
+  if (error) return authHint(`Could not create your account: ${error.message}`, true);
+  $('pwPass').value = '';
+  if (!data.session) authHint(`Almost done. Check ${f.email} for a link to confirm your account, then sign in here.`);
+};
+$('pwForgot').onclick = async () => {
+  const email = $('pwEmail').value.trim();
+  if (!email) { authHint('Type your email above, then tap Forgot your password? again.', true); $('pwEmail').focus(); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  authHint(error ? `Could not send the reset email: ${error.message}` : `Check ${email} for a link to reset your password.`, !!error);
+};
+$('newPwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const { error } = await sb.auth.updateUser({ password: $('newPass').value });
+  if (error) return authHint(`Could not save your new password: ${error.message}`, true);
+  $('newPass').value = ''; $('newPwForm').hidden = true;
+  setSync('Password updated. Saved to your account', 'ok');
+});
 $('signOut').onclick = async () => {
   await sb.auth.signOut();
   // keep this device's copy so the page still works, but stop treating it as account data
