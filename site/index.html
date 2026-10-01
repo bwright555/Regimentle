@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Regimentle</title>
-<meta name="description" content="Score your daily regimen like Wordle and share your results with friends.">
-<meta property="og:title" content="Regimentle">
-<meta property="og:description" content="Score your daily regimen like Wordle and share your results with friends.">
+<title>Habitle</title>
+<meta name="description" content="Build Habits. Share the Streak. Win the Day.">
+<meta property="og:title" content="Habitle">
+<meta property="og:description" content="Build Habits. Share the Streak. Win the Day.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='7' height='7' fill='%233f9a5b'/><rect x='9' width='7' height='7' fill='%233f9a5b'/><rect y='9' width='7' height='7' fill='%233a4150'/><rect x='9' y='9' width='7' height='7' fill='%233f9a5b'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
@@ -38,6 +38,7 @@ body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); padd
 main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
 header { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
 h1 { font: 800 clamp(2rem, 8vw, 2.6rem)/1 var(--display); font-stretch: 125%; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+.tagline { margin: 2px 0 4px; font-weight: 600; font-size: .95rem; letter-spacing: .01em; color: var(--accent); text-wrap: balance; }
 .date { color: var(--muted); font-size: .95rem; }
 .label { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0; }
 
@@ -120,7 +121,8 @@ body { margin: 0; }
 
 <main>
   <header>
-    <h1>Regimentle</h1>
+    <h1>Habitle</h1>
+    <p class="tagline">Build Habits. Share the Streak. Win the Day.</p>
     <div class="date" id="date"></div>
     <p class="sync" id="sync" aria-live="polite">Saved on this device</p>
   </header>
@@ -144,7 +146,7 @@ body { margin: 0; }
       <input id="newPass" type="password" placeholder="New password (at least 6 characters)" autocomplete="new-password" minlength="6" required aria-label="New password">
       <button class="primary" type="submit">Save new password</button>
     </form>
-    <p class="hint" id="signInHint">Sign in to keep your streaks safe and use Regimentle on any device.</p>
+    <p class="hint" id="signInHint">Sign in to keep your streaks safe and use Habitle on any device.</p>
     <div class="who" id="who" hidden>
       <p>Signed in as <b id="whoEmail"></b></p>
       <button class="link" id="signOut" type="button">Sign out</button>
@@ -160,12 +162,12 @@ body { margin: 0; }
   </div>
 
   <section>
-    <p class="label">Your daily regimen</p>
+    <p class="label">Your daily habits</p>
     <form class="add" id="addForm">
-      <input id="newTask" placeholder="Add a daily activity" autocomplete="off" maxlength="80">
+      <input id="newTask" placeholder="Add a daily habit" autocomplete="off" maxlength="80">
       <button class="primary" type="submit">Add</button>
     </form>
-    <p class="hint" id="exampleNote" hidden>These are example activities. <button class="ghost" id="clearEx" type="button" style="padding:2px 8px">Clear them</button></p>
+    <p class="hint" id="exampleNote" hidden>These are example habits. <button class="ghost" id="clearEx" type="button" style="padding:2px 8px">Clear them</button></p>
     <ul id="list"></ul>
     <p class="hint" id="listHint"></p>
   </section>
@@ -251,7 +253,7 @@ function shareText() {
   const s = { done: tasks.filter(t => t.done === true).length, total: tasks.length };
   const c = career();
   if (day.example) { c.done += s.done; c.total += s.total; }
-  const lines = [`Regimentle #${dayNumber()} ${s.done}/${s.total}`, ''];
+  const lines = [`Habitle #${dayNumber()} ${s.done}/${s.total}`, ''];
   if (tasks.length) {
     lines.push(tasks.map(sq).join(''), '');
     tasks.forEach(t => { const n = day.example ? 0 : activityStreak(t.text); lines.push(`${sq(t)} ${t.text}${n > 1 ? ` 🔥${n}` : ''}`); });
@@ -300,7 +302,7 @@ function render() {
     no.setAttribute('aria-label', `Mark "${t.text}" not done`); no.setAttribute('aria-pressed', t.done === false);
     no.onclick = () => { t.done = t.done === false ? null : false; commit(); };
     const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
-    del.setAttribute('aria-label', `Remove "${t.text}" from your regimen`);
+    del.setAttribute('aria-label', `Remove "${t.text}" from your habits`);
     del.onclick = () => { tasks.splice(i, 1); commit(); };
     li.append(name, yes, no, del);
     list.appendChild(li);
@@ -310,8 +312,8 @@ function render() {
   const open = tasks.filter(t => t.done === null).length;
   const hint = $('listHint');
   hint.className = 'hint' + (open ? ' warn' : '');
-  hint.textContent = !tasks.length ? 'Add the activities you want to do every day. They carry over to each new day, and you mark each one ✓ or ✕.'
-    : open ? `${open} activit${open > 1 ? 'ies' : 'y'} still unmarked today. Unmarked ones count as not done.`
+  hint.textContent = !tasks.length ? 'Add the habits you want to keep every day. They carry over to each new day, and you mark each one ✓ or ✕.'
+    : open ? `${open} habit${open > 1 ? 's' : ''} still unmarked today. Unmarked ones count as not done.`
     : 'Everything is marked for today. Copy your results below.';
 
   $('shareText').textContent = shareText();

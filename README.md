@@ -1,6 +1,6 @@
-# Regimentle
+# Habitle
 
-A daily regimen you score like Wordle. Mark each activity done or not, then copy a share text with your tiles, today's score, streaks and career success rate.
+Build Habits. Share the Streak. Win the Day. Habitle is a daily habit tracker you score like Wordle. Mark each activity done or not, then copy a share text with your tiles, today's score, streaks and career success rate.
 
 The website is `site/index.html` and `site/config.js`. `setup.sql` sets up the database. Sign-in and saving use Supabase, which is free at this size. Netlify publishes the `site/` folder on every push to `main` (see `netlify.toml`).
 
@@ -15,7 +15,7 @@ Now open your site, sign in with your email, and share the link.
 
 ## Google sign-in
 
-1. Go to console.cloud.google.com and create a project. Open *APIs & Services > OAuth consent screen*, choose *External*, and fill in the app name (Regimentle) and your email.
+1. Go to console.cloud.google.com and create a project. Open *APIs & Services > OAuth consent screen*, choose *External*, and fill in the app name (Habitle) and your email.
 2. Open *APIs & Services > Credentials > Create credentials > OAuth client ID*. Choose *Web application*.
    - Under *Authorized JavaScript origins*, add your Netlify address.
    - Under *Authorized redirect URIs*, add `https://wylmwyfqmdnrnxcwhtpk.supabase.co/auth/v1/callback`.
