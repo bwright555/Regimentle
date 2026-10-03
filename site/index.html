@@ -38,6 +38,8 @@ body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); padd
 main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
 header { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
 h1 { font: 800 clamp(2rem, 8vw, 2.6rem)/1 var(--display); font-stretch: 125%; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+.joined { margin: 0 0 4px; font-size: .9rem; color: var(--muted); }
+.joined b { color: var(--fg); font-variant-numeric: tabular-nums; }
 .tagline { margin: 2px 0 4px; font-weight: 600; font-size: .95rem; letter-spacing: .01em; color: var(--accent); text-wrap: balance; }
 .date { color: var(--muted); font-size: .95rem; }
 .label { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0; }
@@ -123,6 +125,7 @@ body { margin: 0; }
   <header>
     <h1>Habitle</h1>
     <p class="tagline">Build Habits. Share the Streak. Win the Day.</p>
+    <p class="joined" id="joined" hidden></p>
     <div class="date" id="date"></div>
     <p class="sync" id="sync" aria-live="polite">Saved on this device</p>
   </header>
@@ -388,6 +391,18 @@ async function pull() {
   ensureToday(); save(); render();
   if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
 }
+// "Join N people…" line. Needs the user_count() function from setup.sql; stays hidden until it exists.
+async function showUserCount() {
+  try {
+    const { data, error } = await sb.rpc('user_count');
+    const n = Number(data);
+    if (error || !Number.isFinite(n) || n < 1) return;
+    const el = $('joined');
+    el.textContent = '';
+    el.append('Join ', Object.assign(document.createElement('b'), { textContent: n.toLocaleString() }), ` ${n === 1 ? 'person who is' : 'people who are'} crushing their habits`);
+    el.hidden = false;
+  } catch (e) {}
+}
 function connect() {
   if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || !window.supabase) {
     $('account').hidden = true;
@@ -395,6 +410,7 @@ function connect() {
     return;
   }
   sb = supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+  showUserCount();
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') { $('newPwForm').hidden = false; $('newPass').focus(); }
     const next = session ? session.user : null;

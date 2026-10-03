@@ -14,3 +14,13 @@ create policy "read own days"   on public.regimen_days for select using (auth.ui
 create policy "insert own days" on public.regimen_days for insert with check (auth.uid() = user_id);
 create policy "update own days" on public.regimen_days for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "delete own days" on public.regimen_days for delete using (auth.uid() = user_id);
+
+-- Public sign-up count for the "Join N people…" line. Returns only a number, never any user details.
+create or replace function public.user_count()
+returns bigint
+language sql
+security definer
+set search_path = ''
+as $$ select count(*) from auth.users $$;
+
+grant execute on function public.user_count() to anon, authenticated;
