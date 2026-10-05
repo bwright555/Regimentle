@@ -387,7 +387,9 @@ async function pull() {
   const ex = today() && today().example ? today() : null;
   localOnly.forEach(k => { server[k] = state.days[k]; });
   state.days = server;
-  if (ex && !server[todayKey()]) state.days[todayKey()] = ex;
+  // A fresh browser starts with example habits. Keep them only for brand-new accounts;
+  // anyone with saved days gets today rebuilt from their own most recent habits.
+  if (ex && !Object.keys(server).length) state.days[todayKey()] = ex;
   ensureToday(); save(); render();
   if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
 }
