@@ -98,7 +98,7 @@ details summary { cursor: pointer; }
 .alltime .totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; }
 .alltime .totals b { display: block; font: 800 1.25rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
 .alltime .totals span { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.alltime .sub { margin: 6px 0 0; font-size: .85rem; font-weight: 600; }
+.alltime details .habits { margin-top: 10px; }
 .habits li { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px; }
 .habits .top { display: flex; align-items: center; gap: 8px; }
 .habits .hn { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
@@ -201,10 +201,14 @@ body { margin: 0; }
   <section class="alltime" id="allTime" hidden>
     <p class="label">All-time stats</p>
     <div class="totals" id="atTotals"></div>
-    <p class="sub" id="atCurrentHead">Current habits</p>
-    <ul class="habits" id="atCurrent"></ul>
-    <p class="sub" id="atPastHead">Past habits</p>
-    <ul class="habits" id="atPast"></ul>
+    <details id="atCurrentWrap">
+      <summary class="label" id="atCurrentHead">Current habits</summary>
+      <ul class="habits" id="atCurrent"></ul>
+    </details>
+    <details id="atPastWrap">
+      <summary class="label" id="atPastHead">Past habits</summary>
+      <ul class="habits" id="atPast"></ul>
+    </details>
   </section>
 
   <section>
@@ -409,8 +413,10 @@ function renderAllTime() {
   };
   const cur = st.list.filter(h => h.active).sort((a, b) => b.tracked - a.tracked);
   const past = st.list.filter(h => !h.active).sort((a, b) => b.last.localeCompare(a.last));
-  $('atCurrent').replaceChildren(...cur.map(row)); $('atCurrentHead').hidden = !cur.length;
-  $('atPast').replaceChildren(...past.map(row)); $('atPastHead').hidden = !past.length;
+  $('atCurrent').replaceChildren(...cur.map(row)); $('atCurrentWrap').hidden = !cur.length;
+  $('atCurrentHead').textContent = `Current habits (${cur.length})`;
+  $('atPast').replaceChildren(...past.map(row)); $('atPastWrap').hidden = !past.length;
+  $('atPastHead').textContent = `Past habits (${past.length})`;
 }
 
 function renderHistory() {
