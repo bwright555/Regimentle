@@ -85,6 +85,7 @@ pre { margin: 0; font: 500 .9rem/1.55 var(--mono); white-space: pre-wrap; overfl
 .toast { color: var(--hit); font-weight: 600; font-size: .9rem; min-height: 1.4em; margin: 0; }
 
 .flame { font-size: .8rem; color: var(--open); font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-block; }
+.flame.pending { opacity: .45; filter: grayscale(1); }
 .sync { margin: 4px 0 0; font-size: .8rem; color: var(--muted); }
 .sync::before { content: ""; display: inline-block; vertical-align: middle; margin: -2px 6px 0 0; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
 .sync.ok::before { background: var(--hit); }
@@ -254,20 +255,30 @@ function career() {
   return { done, total };
 }
 function streak() {
-  // consecutive days, ending today or yesterday, where every task was done
+  // consecutive days, ending today or yesterday, where every task was done.
+  // Yesterday's run only carries while today is still open; a ✕ today ends it.
   let n = 0; const d = new Date();
   const k = x => x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
   const perfect = key => { const day = state.days[key]; if (!day) return false; const s = dayScore(day); return s.total > 0 && s.done === s.total; };
-  if (!perfect(k(d))) d.setDate(d.getDate() - 1);
+  if (!perfect(k(d))) {
+    const t = state.days[k(d)];
+    if (t && !t.example && t.tasks.some(x => x.done === false)) return 0;
+    d.setDate(d.getDate() - 1);
+  }
   while (perfect(k(d))) { n++; d.setDate(d.getDate() - 1); }
   return n;
 }
 function activityStreak(text) {
-  // consecutive days this activity was marked done, counting back from today (today only counts once it is done)
+  // consecutive days this activity was marked done, counting back from today.
+  // Today only counts once it is ✓; while it is unmarked the run through yesterday is still alive, and a ✕ ends it.
   let n = 0; const d = new Date();
   const k = x => x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
   const doneOn = key => { const day = state.days[key]; return !!day && !day.example && day.tasks.some(t => t.text === text && t.done === true); };
-  if (!doneOn(k(d))) d.setDate(d.getDate() - 1);
+  if (!doneOn(k(d))) {
+    const t = state.days[k(d)];
+    if (t && t.tasks.some(x => x.text === text && x.done === false)) return 0;
+    d.setDate(d.getDate() - 1);
+  }
   while (doneOn(k(d))) { n++; d.setDate(d.getDate() - 1); }
   return n;
 }
@@ -283,7 +294,7 @@ function shareText() {
   const lines = [`Habitle ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${s.done}/${s.total}`, ''];
   if (tasks.length) {
     lines.push(tasks.map(sq).join(''), '');
-    tasks.forEach(t => { const n = day.example ? 0 : activityStreak(t.text); lines.push(`${sq(t)} ${t.text}${n > 1 ? ` 🔥${n}` : ''}`); });
+    tasks.forEach(t => { const n = day.example || t.done !== true ? 0 : activityStreak(t.text); lines.push(`${sq(t)} ${t.text}${n > 1 ? ` 🔥${n}` : ''}`); });
     lines.push('');
   }
   lines.push(`Today: ${pct(s.done, s.total)} · Career: ${pct(c.done, c.total)} (${c.done}/${c.total})`);
@@ -321,7 +332,12 @@ function render() {
     if (t.done === true) li.className = 'hit';
     const name = document.createElement('span'); name.className = 'name'; name.textContent = t.text;
     const n = day.example ? 0 : activityStreak(t.text);
-    if (n > 1) { const f = document.createElement('span'); f.className = 'flame'; f.textContent = `🔥${n}`; f.title = `Done ${n} days in a row`; name.append(' ', f); }
+    if (n > 1) {
+      const f = document.createElement('span'); f.textContent = `🔥${n}`;
+      f.className = 'flame' + (t.done === true ? '' : ' pending');
+      f.title = t.done === true ? `Done ${n} days in a row` : `Done ${n} days in a row through yesterday. Mark it ✓ today to keep it going.`;
+      name.append(' ', f);
+    }
     const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
     yes.setAttribute('aria-label', `Mark "${t.text}" done`); yes.setAttribute('aria-pressed', t.done === true);
     yes.onclick = () => { t.done = t.done === true ? null : true; commit(); };
