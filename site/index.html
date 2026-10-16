@@ -132,6 +132,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 .lists-home .chev { color: var(--muted); font-size: 1.2rem; line-height: 1; }
 .list-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .list-top h2 { flex: 1; min-width: 0; margin: 0; font: 800 1.3rem/1.2 var(--display); overflow-wrap: anywhere; }
+.list-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.list-nav .primary { padding: 6px 12px; font-size: .85rem; }
 .back { background: none; border: none; color: var(--accent); padding: 4px 0; font-weight: 600; align-self: flex-start; }
 .list-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .list-actions button { padding: 8px 6px; font-size: .85rem; }
@@ -219,7 +221,10 @@ body { margin: 0; }
       <p class="hint" id="listsHint"></p>
     </section>
     <section id="listOpen" hidden>
-      <button class="back" id="listBack" type="button">‹ My lists</button>
+      <div class="list-nav">
+        <button class="back" id="listBack" type="button">‹ All my lists</button>
+        <button class="primary" id="listNew" type="button">+ New list</button>
+      </div>
       <div class="list-top"><h2 id="listTitle"></h2><span class="lc" id="listCount"></span></div>
       <form class="add" id="renameForm" hidden>
         <input id="renameInput" maxlength="60" aria-label="List name" autocomplete="off">
@@ -904,6 +909,7 @@ $('listItemForm').addEventListener('submit', e => {
   listsDoc.commit();
 });
 $('listBack').onclick = () => showList(null);
+$('listNew').onclick = () => { showList(null); $('newListName').focus(); };
 $('listReset').onclick = () => { const l = openList(); l.items.forEach(i => { i.done = false; }); listsDoc.commit(); };
 $('listRename').onclick = () => { $('renameForm').hidden = false; $('renameInput').value = openList().name; $('renameInput').select(); };
 $('renameCancel').onclick = () => { $('renameForm').hidden = true; };
@@ -932,7 +938,11 @@ function showTab(name) {
   for (const [k, [tab, view]] of Object.entries(TABS)) { $(view).hidden = k !== name; $(tab).setAttribute('aria-selected', k === name); }
   try { localStorage.setItem(KEY + '.tab', name); } catch (e) {}
 }
-for (const k of Object.keys(TABS)) $(TABS[k][0]).onclick = () => showTab(k);
+for (const k of Object.keys(TABS)) $(TABS[k][0]).onclick = () => {
+  // tapping My lists again while a list is open goes back to all lists
+  if (k === 'lists' && !$('listsView').hidden && openListId) showList(null);
+  showTab(k);
+};
 try { showTab(localStorage.getItem(KEY + '.tab') || 'habits'); } catch (e) {}
 
 $('addForm').addEventListener('submit', e => {
