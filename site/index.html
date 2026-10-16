@@ -120,6 +120,10 @@ details summary { cursor: pointer; }
 .todo-count b { color: var(--fg); font-variant-numeric: tabular-nums; }
 .todos li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
 .todos .when { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.grip { cursor: grab; color: var(--muted); padding: 6px 2px; font-size: 1rem; line-height: 1; touch-action: none; user-select: none; letter-spacing: -2px; }
+#todoList .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+#todoList li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
+body.dragging, body.dragging * { cursor: grabbing !important; }
 .done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
 html { color-scheme: light; }
@@ -201,7 +205,7 @@ body { margin: 0; }
     <section>
       <details id="todoDoneWrap">
         <summary class="label" id="todoDoneHead">Done</summary>
-        <div class="done-head" style="margin-top:10px"><p class="hint">Checked-off to-dos stay here until you clear them.</p><button class="ghost" id="todoClear" type="button">Clear all</button></div>
+        <div class="done-head" style="margin-top:10px"><p class="hint">Checked-off to-dos disappear a day after you finish them.</p><button class="ghost" id="todoClear" type="button">Clear all</button></div>
         <ul class="todos" id="todoDone" style="margin-top:10px"></ul>
       </details>
     </section>
@@ -651,6 +655,12 @@ function renderTodos() {
     Object.assign(document.createElement('b'), { textContent: doneToday }), ` done today`);
   const item = t => {
     const li = document.createElement('li'); if (t.done) li.className = 'hit';
+    li.dataset.id = t.id;
+    if (!t.done) {
+      const grip = document.createElement('span'); grip.className = 'grip'; grip.textContent = '⋮⋮';
+      grip.setAttribute('aria-hidden', 'true'); grip.title = 'Drag to reorder';
+      li.append(grip);
+    }
     const name = document.createElement('span'); name.className = 'name'; name.textContent = t.text;
     const when = document.createElement('span'); when.className = 'when';
     when.textContent = t.done ? `Done ${shortDate(t.doneAt)}` : `Added ${shortDate(t.created)}`;
@@ -661,6 +671,7 @@ function renderTodos() {
     del.setAttribute('aria-label', `Delete "${t.text}"`);
     del.onclick = () => { state.todos = state.todos.filter(x => x !== t); commitTodos(); };
     li.append(name, when, yes, del);
+    if (!t.done) { dragFrom(li.querySelector('.grip'), li); dragFrom(name, li); }
     return li;
   };
   $('todoList').replaceChildren(...open.map(item));
@@ -670,6 +681,39 @@ function renderTodos() {
   $('todoHint').textContent = !state.todos.length ? 'Add one-off tasks here. They stay on your list until you check them off, and they don\'t affect your habit scores.'
     : !open.length ? 'All clear. Nothing left to do.' : '';
   if (user && !todoCloud) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
+}
+// Drag an open to-do (by its handle or name) to a new spot. Pointer events cover mouse, touch and pen.
+function dragFrom(handle, li) {
+  handle.addEventListener('pointerdown', e => {
+    if (e.button) return;
+    e.preventDefault();
+    const list = li.parentElement; let moved = false;
+    const move = ev => {
+      if (!moved) { moved = true; li.classList.add('dragging'); document.body.classList.add('dragging'); }
+      const mid = el => { const b = el.getBoundingClientRect(); return b.top + b.height / 2; };
+      let prev, next;
+      while ((prev = li.previousElementSibling) && ev.clientY < mid(prev)) list.insertBefore(li, prev);
+      while ((next = li.nextElementSibling) && ev.clientY > mid(next)) list.insertBefore(next, li);
+    };
+    const end = () => {
+      removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
+      li.classList.remove('dragging'); document.body.classList.remove('dragging');
+      if (!moved) return;
+      const order = [...list.children].map(x => x.dataset.id);
+      const open = order.map(id => state.todos.find(t => t.id === id)).filter(Boolean);
+      state.todos = [...open, ...state.todos.filter(t => !open.includes(t))];
+      commitTodos();
+    };
+    // listen on the window: moving the row in the page would drop pointer capture on the handle
+    addEventListener('pointermove', move); addEventListener('pointerup', end); addEventListener('pointercancel', end);
+  });
+}
+// Checked-off to-dos disappear 24 hours after they were finished.
+const TODO_KEEP_MS = 24 * 60 * 60 * 1000;
+function pruneTodos() {
+  const keep = state.todos.filter(t => !t.done || !t.doneAt || Date.now() - t.doneAt < TODO_KEEP_MS);
+  if (keep.length === state.todos.length) return false;
+  state.todos = keep; return true;
 }
 function commitTodos() {
   save(); renderTodos();
@@ -692,7 +736,7 @@ async function pullTodos() {
   const { data, error } = await sb.from('todos').select('items').eq('user_id', user.id).maybeSingle();
   if (error) { console.error(error); todoCloud = false; renderTodos(); return; }
   todoCloud = true;
-  if (data && Array.isArray(data.items)) { state.todos = data.items; save(); renderTodos(); }
+  if (data && Array.isArray(data.items)) { state.todos = data.items; if (pruneTodos()) commitTodos(); else { save(); renderTodos(); } }
   else if (state.todos.length) commitTodos(); // first sign-in on this device: upload what's here
   else renderTodos();
 }
@@ -752,7 +796,8 @@ $('copyBtn').onclick = () => {
 let current = todayKey();
 setInterval(() => { if (todayKey() !== current) { current = todayKey(); ensureToday(); render(); } }, 60000);
 
-load(); render(); renderTodos();
+load(); pruneTodos(); save(); render(); renderTodos();
+setInterval(() => { if (pruneTodos()) commitTodos(); }, 60000);
 connect();
 </script>
 </body>
