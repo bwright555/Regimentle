@@ -743,7 +743,7 @@ async function pullTodos() {
 $('todoForm').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('newTodo').value.trim(); if (!v) return;
-  state.todos.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, created: Date.now(), doneAt: null });
+  state.todos.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, created: Date.now(), doneAt: null });
   $('newTodo').value = '';
   commitTodos();
 });
