@@ -112,7 +112,7 @@ details summary { cursor: pointer; }
 @media (max-width: 420px) { .alltime .totals { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.pop { animation: none; } }
 /* Habits / To-do switch */
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
 .tabs button { background: transparent; color: var(--muted); border: none; padding: 8px 10px; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
 .view { display: flex; flex-direction: column; gap: 28px; }
@@ -121,9 +121,25 @@ details summary { cursor: pointer; }
 .todos li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
 .todos .when { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .grip { cursor: grab; color: var(--muted); padding: 6px 2px; font-size: 1rem; line-height: 1; touch-action: none; user-select: none; letter-spacing: -2px; }
-#todoList .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
-#todoList li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
+#todoList .name, #listItems .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+#todoList li.dragging, #listItems li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
 body.dragging, body.dragging * { cursor: grabbing !important; }
+.lists-home li { padding: 0; }
+.lists-home .open-list { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--fg); text-align: left; padding: 12px 14px; font-weight: 400; }
+.lists-home .open-list:hover .ln { color: var(--accent); }
+.lists-home .ln { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.lists-home .lc { font-size: .8rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lists-home .chev { color: var(--muted); font-size: 1.2rem; line-height: 1; }
+.list-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.list-top h2 { flex: 1; min-width: 0; margin: 0; font: 800 1.3rem/1.2 var(--display); overflow-wrap: anywhere; }
+.back { background: none; border: none; color: var(--accent); padding: 4px 0; font-weight: 600; align-self: flex-start; }
+.list-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.list-actions button { padding: 8px 6px; font-size: .85rem; }
+.list-actions .danger { color: #c2453b; }
+.progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--hit); transition: width .25s; }
+#listItems li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
+@media (max-width: 420px) { .list-actions { grid-template-columns: repeat(2, 1fr); } }
 .done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
 html { color-scheme: light; }
@@ -189,6 +205,41 @@ body { margin: 0; }
   <div class="tabs" role="tablist" aria-label="Choose a list">
     <button type="button" role="tab" id="tabHabits" aria-controls="habitsView" aria-selected="true">Habits</button>
     <button type="button" role="tab" id="tabTodo" aria-controls="todoView" aria-selected="false">To-do</button>
+    <button type="button" role="tab" id="tabLists" aria-controls="listsView" aria-selected="false">My lists</button>
+  </div>
+
+  <div class="view" id="listsView" role="tabpanel" aria-labelledby="tabLists" hidden>
+    <section class="lists-home" id="listsHome">
+      <p class="label">My lists</p>
+      <form class="add" id="newListForm">
+        <input id="newListName" placeholder="New list, like Groceries or Beach trip" autocomplete="off" maxlength="60">
+        <button class="primary" type="submit">Create</button>
+      </form>
+      <ul id="listsList"></ul>
+      <p class="hint" id="listsHint"></p>
+    </section>
+    <section id="listOpen" hidden>
+      <button class="back" id="listBack" type="button">‹ My lists</button>
+      <div class="list-top"><h2 id="listTitle"></h2><span class="lc" id="listCount"></span></div>
+      <form class="add" id="renameForm" hidden>
+        <input id="renameInput" maxlength="60" aria-label="List name" autocomplete="off">
+        <button class="primary" type="submit">Save</button>
+        <button class="ghost" type="button" id="renameCancel">Cancel</button>
+      </form>
+      <div class="progress"><i id="listBar"></i></div>
+      <div class="list-actions">
+        <button class="ghost" type="button" id="listReset" title="Uncheck every item so you can use this list again">Use again</button>
+        <button class="ghost" type="button" id="listRename">Rename</button>
+        <button class="ghost" type="button" id="listCopy">Copy</button>
+        <button class="ghost danger" type="button" id="listDelete">Delete</button>
+      </div>
+      <form class="add" id="listItemForm">
+        <input id="newListItem" placeholder="Add an item" autocomplete="off" maxlength="120">
+        <button class="primary" type="submit">Add</button>
+      </form>
+      <ul id="listItems"></ul>
+      <p class="hint" id="listHint2"></p>
+    </section>
   </div>
 
   <div class="view" id="todoView" role="tabpanel" aria-labelledby="tabTodo" hidden>
@@ -273,6 +324,7 @@ function load() {
   try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
   if (!state || !state.days) state = { days: {} };
   if (!Array.isArray(state.todos)) state.todos = [];
+  if (!Array.isArray(state.lists)) state.lists = [];
   ensureToday();
 }
 function ensureToday() {
@@ -562,7 +614,7 @@ async function pull() {
   if (ex && !Object.keys(server).length) state.days[todayKey()] = ex;
   ensureToday(); save(); render();
   if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
-  pullTodos();
+  pullTodos(); listsDoc.pull();
 }
 // "Join N people…" line. Needs the user_count() function from setup.sql; stays hidden until it exists.
 async function showUserCount() {
@@ -671,7 +723,7 @@ function renderTodos() {
     del.setAttribute('aria-label', `Delete "${t.text}"`);
     del.onclick = () => { state.todos = state.todos.filter(x => x !== t); commitTodos(); };
     li.append(name, when, yes, del);
-    if (!t.done) { dragFrom(li.querySelector('.grip'), li); dragFrom(name, li); }
+    if (!t.done) [li.querySelector('.grip'), name].forEach(h => dragFrom(h, li, reorderTodos));
     return li;
   };
   $('todoList').replaceChildren(...open.map(item));
@@ -682,8 +734,9 @@ function renderTodos() {
     : !open.length ? 'All clear. Nothing left to do.' : '';
   if (user && !todoCloud) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
 }
-// Drag an open to-do (by its handle or name) to a new spot. Pointer events cover mouse, touch and pen.
-function dragFrom(handle, li) {
+// Drag a row (by its handle or name) to a new spot; onDrop gets the new order of row ids.
+// Pointer events cover mouse, touch and pen.
+function dragFrom(handle, li, onDrop) {
   handle.addEventListener('pointerdown', e => {
     if (e.button) return;
     e.preventDefault();
@@ -699,14 +752,16 @@ function dragFrom(handle, li) {
       removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
       li.classList.remove('dragging'); document.body.classList.remove('dragging');
       if (!moved) return;
-      const order = [...list.children].map(x => x.dataset.id);
-      const open = order.map(id => state.todos.find(t => t.id === id)).filter(Boolean);
-      state.todos = [...open, ...state.todos.filter(t => !open.includes(t))];
-      commitTodos();
+      onDrop([...list.children].map(x => x.dataset.id));
     };
     // listen on the window: moving the row in the page would drop pointer capture on the handle
     addEventListener('pointermove', move); addEventListener('pointerup', end); addEventListener('pointercancel', end);
   });
+}
+function reorderTodos(order) {
+  const open = order.map(id => state.todos.find(t => t.id === id)).filter(Boolean);
+  state.todos = [...open, ...state.todos.filter(t => !open.includes(t))];
+  commitTodos();
 }
 // Checked-off to-dos disappear 24 hours after they were finished.
 const TODO_KEEP_MS = 24 * 60 * 60 * 1000;
@@ -743,22 +798,142 @@ async function pullTodos() {
 $('todoForm').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('newTodo').value.trim(); if (!v) return;
-  state.todos.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, created: Date.now(), doneAt: null });
+  state.todos.push({ id: newId(), text: v, done: false, created: Date.now(), doneAt: null });
   $('newTodo').value = '';
   commitTodos();
 });
 $('todoClear').onclick = () => { state.todos = state.todos.filter(t => !t.done); commitTodos(); };
 
-// ---- Habits / To-do switch (remembered on this device)
+// ---- My lists: reusable checklists (groceries, packing) that can be added to, reset, copied, renamed and deleted.
+// Synced as one row per person in the lists table (see setup.sql); until that table exists they stay on this device.
+function cloudDoc(table, get, set, after) {
+  let timer = null, writing = false;
+  const doc = { ok: true };
+  doc.commit = () => {
+    save(); after();
+    if (!user) return;
+    clearTimeout(timer); timer = setTimeout(doc.flush, 600);
+  };
+  doc.flush = async () => {
+    timer = null;
+    if (writing) { timer = setTimeout(doc.flush, 300); return; }
+    writing = true;
+    try {
+      const { error } = await sb.from(table).upsert({ user_id: user.id, items: get(), updated_at: new Date().toISOString() });
+      if (error) throw error;
+      doc.ok = true;
+    } catch (e) { console.error(e); doc.ok = false; }
+    finally { writing = false; after(); }
+  };
+  doc.pull = async () => {
+    if (!user || timer || writing) return;
+    const { data, error } = await sb.from(table).select('items').eq('user_id', user.id).maybeSingle();
+    if (error) { console.error(error); doc.ok = false; after(); return; }
+    doc.ok = true;
+    if (data && Array.isArray(data.items)) { set(data.items); save(); after(); }
+    else if (get().length) doc.commit(); // first sign-in on this device: upload what's here
+    else after();
+  };
+  return doc;
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+let openListId = null;
+try { openListId = localStorage.getItem(KEY + '.list'); } catch (e) {}
+const listsDoc = cloudDoc('lists', () => state.lists, v => { state.lists = v; }, renderLists);
+const openList = () => state.lists.find(l => l.id === openListId);
+function showList(id) {
+  openListId = id; $('renameForm').hidden = true;
+  try { id ? localStorage.setItem(KEY + '.list', id) : localStorage.removeItem(KEY + '.list'); } catch (e) {}
+  renderLists();
+  if (id) $('newListItem').focus();
+}
+function renderLists() {
+  const l = openList();
+  $('listsHome').hidden = !!l; $('listOpen').hidden = !l;
+  const offline = user && !listsDoc.ok ? 'Lists are saved on this device for now.' : '';
+  if (!l) {
+    $('listsList').replaceChildren(...state.lists.map(x => {
+      const li = document.createElement('li');
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'open-list';
+      const n = document.createElement('span'); n.className = 'ln'; n.textContent = x.name;
+      const c = document.createElement('span'); c.className = 'lc';
+      const got = x.items.filter(i => i.done).length;
+      c.textContent = !x.items.length ? 'Empty' : got ? `${got} of ${x.items.length} checked` : `${x.items.length} item${x.items.length > 1 ? 's' : ''}`;
+      const ch = document.createElement('span'); ch.className = 'chev'; ch.textContent = '›'; ch.setAttribute('aria-hidden', 'true');
+      b.append(n, c, ch); b.onclick = () => showList(x.id);
+      li.append(b); return li;
+    }));
+    $('listsHint').textContent = (!state.lists.length ? 'Make a list you come back to, like groceries or packing for a trip. Check things off as you go, then tap Use again to start fresh next time. ' : '') + offline;
+    return;
+  }
+  $('listTitle').textContent = l.name;
+  const got = l.items.filter(i => i.done).length;
+  $('listCount').textContent = l.items.length ? `${got}/${l.items.length}` : '';
+  $('listBar').style.width = l.items.length ? `${got / l.items.length * 100}%` : '0';
+  $('listItems').replaceChildren(...l.items.map(it => {
+    const li = document.createElement('li'); li.dataset.id = it.id; if (it.done) li.className = 'hit';
+    const grip = document.createElement('span'); grip.className = 'grip'; grip.textContent = '⋮⋮'; grip.setAttribute('aria-hidden', 'true'); grip.title = 'Drag to reorder';
+    const name = document.createElement('span'); name.className = 'name'; name.textContent = it.text;
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
+    yes.setAttribute('aria-label', `Check off "${it.text}"`); yes.setAttribute('aria-pressed', !!it.done);
+    yes.onclick = () => { it.done = !it.done; listsDoc.commit(); };
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+    del.setAttribute('aria-label', `Remove "${it.text}" from this list`);
+    del.onclick = () => { l.items = l.items.filter(x => x !== it); listsDoc.commit(); };
+    li.append(grip, name, yes, del);
+    [grip, name].forEach(h => dragFrom(h, li, order => {
+      l.items = order.map(id => l.items.find(x => x.id === id)).filter(Boolean); listsDoc.commit();
+    }));
+    return li;
+  }));
+  $('listHint2').textContent = (!l.items.length ? 'Add what belongs on this list. It stays saved, so you can reuse it any time. '
+    : got === l.items.length ? 'Everything is checked. Tap Use again to uncheck it all for next time. ' : '') + offline;
+}
+$('newListForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('newListName').value.trim(); if (!v) return;
+  const l = { id: newId(), name: v, items: [], created: Date.now() };
+  state.lists.push(l); $('newListName').value = '';
+  listsDoc.commit(); showList(l.id);
+});
+$('listItemForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const l = openList(), v = $('newListItem').value.trim(); if (!l || !v) return;
+  l.items.push({ id: newId(), text: v, done: false });
+  $('newListItem').value = '';
+  listsDoc.commit();
+});
+$('listBack').onclick = () => showList(null);
+$('listReset').onclick = () => { const l = openList(); l.items.forEach(i => { i.done = false; }); listsDoc.commit(); };
+$('listRename').onclick = () => { $('renameForm').hidden = false; $('renameInput').value = openList().name; $('renameInput').select(); };
+$('renameCancel').onclick = () => { $('renameForm').hidden = true; };
+$('renameForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('renameInput').value.trim(); if (!v) return;
+  openList().name = v; $('renameForm').hidden = true; listsDoc.commit();
+});
+$('listCopy').onclick = () => {
+  const l = openList();
+  const copy = { id: newId(), name: `${l.name} (copy)`, items: l.items.map(i => ({ id: newId(), text: i.text, done: false })), created: Date.now() };
+  state.lists.splice(state.lists.indexOf(l) + 1, 0, copy);
+  listsDoc.commit(); showList(copy.id);
+};
+$('listDelete').onclick = () => {
+  const l = openList();
+  if (!confirm(`Delete "${l.name}"? This can't be undone.`)) return;
+  state.lists = state.lists.filter(x => x !== l);
+  listsDoc.commit(); showList(null);
+};
+
+// ---- Habits / To-do / My lists switch (remembered on this device)
+const TABS = { habits: ['tabHabits', 'habitsView'], todo: ['tabTodo', 'todoView'], lists: ['tabLists', 'listsView'] };
 function showTab(name) {
-  const todo = name === 'todo';
-  $('todoView').hidden = !todo; $('habitsView').hidden = todo;
-  $('tabTodo').setAttribute('aria-selected', todo); $('tabHabits').setAttribute('aria-selected', !todo);
+  if (!TABS[name]) name = 'habits';
+  for (const [k, [tab, view]] of Object.entries(TABS)) { $(view).hidden = k !== name; $(tab).setAttribute('aria-selected', k === name); }
   try { localStorage.setItem(KEY + '.tab', name); } catch (e) {}
 }
-$('tabHabits').onclick = () => showTab('habits');
-$('tabTodo').onclick = () => showTab('todo');
-try { if (localStorage.getItem(KEY + '.tab') === 'todo') showTab('todo'); } catch (e) {}
+for (const k of Object.keys(TABS)) $(TABS[k][0]).onclick = () => showTab(k);
+try { showTab(localStorage.getItem(KEY + '.tab') || 'habits'); } catch (e) {}
 
 $('addForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -796,7 +971,7 @@ $('copyBtn').onclick = () => {
 let current = todayKey();
 setInterval(() => { if (todayKey() !== current) { current = todayKey(); ensureToday(); render(); } }, 60000);
 
-load(); pruneTodos(); save(); render(); renderTodos();
+load(); pruneTodos(); save(); render(); renderTodos(); renderLists();
 setInterval(() => { if (pruneTodos()) commitTodos(); }, 60000);
 connect();
 </script>

@@ -38,3 +38,17 @@ create policy "read own todos"   on public.todos for select using (auth.uid() = 
 create policy "insert own todos" on public.todos for insert with check (auth.uid() = user_id);
 create policy "update own todos" on public.todos for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "delete own todos" on public.todos for delete using (auth.uid() = user_id);
+
+-- My lists (reusable checklists like groceries or packing). One row per person holding all their lists.
+create table if not exists public.lists (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  items      jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.lists enable row level security;
+
+create policy "read own lists"   on public.lists for select using (auth.uid() = user_id);
+create policy "insert own lists" on public.lists for insert with check (auth.uid() = user_id);
+create policy "update own lists" on public.lists for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "delete own lists" on public.lists for delete using (auth.uid() = user_id);
