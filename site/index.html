@@ -121,26 +121,26 @@ details summary { cursor: pointer; }
 .todos li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
 .todos .when { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .grip { cursor: grab; color: var(--muted); padding: 6px 2px; font-size: 1rem; line-height: 1; touch-action: none; user-select: none; letter-spacing: -2px; }
-#todoList .name, #listItems .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
-#todoList li.dragging, #listItems li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
+#todoList .name, .list-items .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+#todoList li.dragging, .list-items li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
 body.dragging, body.dragging * { cursor: grabbing !important; }
-.lists-home li { padding: 0; }
-.lists-home .open-list { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--fg); text-align: left; padding: 12px 14px; font-weight: 400; }
-.lists-home .open-list:hover .ln { color: var(--accent); }
-.lists-home .ln { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
-.lists-home .lc { font-size: .8rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.lists-home .chev { color: var(--muted); font-size: 1.2rem; line-height: 1; }
-.list-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.list-top h2 { flex: 1; min-width: 0; margin: 0; font: 800 1.3rem/1.2 var(--display); overflow-wrap: anywhere; }
-.list-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.list-nav .primary { padding: 6px 12px; font-size: .85rem; }
-.back { background: none; border: none; color: var(--accent); padding: 4px 0; font-weight: 600; align-self: flex-start; }
+.lists { display: flex; flex-direction: column; gap: 8px; }
+.list-card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.list-card.open { border-color: var(--muted); }
+.list-head { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--fg); text-align: left; padding: 12px 14px; font-weight: 400; }
+.list-head .chev { color: var(--muted); font-size: 1.2rem; line-height: 1; transition: transform .2s; }
+.list-card.open .list-head .chev { transform: rotate(90deg); }
+.list-head:hover .ln { color: var(--accent); }
+.list-head .ln { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.lc { font-size: .8rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.list-body { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; }
+.list-items li { background: var(--bg); }
 .list-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .list-actions button { padding: 8px 6px; font-size: .85rem; }
 .list-actions .danger { color: #c2453b; }
 .progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .progress i { display: block; height: 100%; background: var(--hit); transition: width .25s; }
-#listItems li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
+.list-items li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
 @media (max-width: 420px) { .list-actions { grid-template-columns: repeat(2, 1fr); } }
 .done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
@@ -211,39 +211,14 @@ body { margin: 0; }
   </div>
 
   <div class="view" id="listsView" role="tabpanel" aria-labelledby="tabLists" hidden>
-    <section class="lists-home" id="listsHome">
+    <section class="lists-home">
       <p class="label">My lists</p>
       <form class="add" id="newListForm">
-        <input id="newListName" placeholder="New list, like Groceries or Beach trip" autocomplete="off" maxlength="60">
+        <input id="newListName" placeholder="New list name" autocomplete="off" maxlength="60">
         <button class="primary" type="submit">Create</button>
       </form>
-      <ul id="listsList"></ul>
+      <div class="lists" id="listsList"></div>
       <p class="hint" id="listsHint"></p>
-    </section>
-    <section id="listOpen" hidden>
-      <div class="list-nav">
-        <button class="back" id="listBack" type="button">‹ All my lists</button>
-        <button class="primary" id="listNew" type="button">+ New list</button>
-      </div>
-      <div class="list-top"><h2 id="listTitle"></h2><span class="lc" id="listCount"></span></div>
-      <form class="add" id="renameForm" hidden>
-        <input id="renameInput" maxlength="60" aria-label="List name" autocomplete="off">
-        <button class="primary" type="submit">Save</button>
-        <button class="ghost" type="button" id="renameCancel">Cancel</button>
-      </form>
-      <div class="progress"><i id="listBar"></i></div>
-      <div class="list-actions">
-        <button class="ghost" type="button" id="listReset" title="Uncheck every item so you can use this list again">Use again</button>
-        <button class="ghost" type="button" id="listRename">Rename</button>
-        <button class="ghost" type="button" id="listCopy">Copy</button>
-        <button class="ghost danger" type="button" id="listDelete">Delete</button>
-      </div>
-      <form class="add" id="listItemForm">
-        <input id="newListItem" placeholder="Add an item" autocomplete="off" maxlength="120">
-        <button class="primary" type="submit">Add</button>
-      </form>
-      <ul id="listItems"></ul>
-      <p class="hint" id="listHint2"></p>
     </section>
   </div>
 
@@ -842,94 +817,89 @@ function cloudDoc(table, get, set, after) {
   return doc;
 }
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-let openListId = null;
-try { openListId = localStorage.getItem(KEY + '.list'); } catch (e) {}
 const listsDoc = cloudDoc('lists', () => state.lists, v => { state.lists = v; }, renderLists);
-const openList = () => state.lists.find(l => l.id === openListId);
-function showList(id) {
-  openListId = id; $('renameForm').hidden = true;
-  try { id ? localStorage.setItem(KEY + '.list', id) : localStorage.removeItem(KEY + '.list'); } catch (e) {}
-  renderLists();
-  if (id) $('newListItem').focus();
-}
-function renderLists() {
-  const l = openList();
-  $('listsHome').hidden = !!l; $('listOpen').hidden = !l;
+// Which lists are expanded and which one is being renamed (expanded ones are remembered on this device)
+let expanded = new Set(), renaming = null;
+try { expanded = new Set(JSON.parse(localStorage.getItem(KEY + '.open') || '[]')); } catch (e) {}
+const saveExpanded = () => { try { localStorage.setItem(KEY + '.open', JSON.stringify([...expanded])); } catch (e) {} };
+const el = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
+function renderLists(focusId) {
   const offline = user && !listsDoc.ok ? 'Lists are saved on this device for now.' : '';
-  if (!l) {
-    $('listsList').replaceChildren(...state.lists.map(x => {
-      const li = document.createElement('li');
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'open-list';
-      const n = document.createElement('span'); n.className = 'ln'; n.textContent = x.name;
-      const c = document.createElement('span'); c.className = 'lc';
-      const got = x.items.filter(i => i.done).length;
-      c.textContent = !x.items.length ? 'Empty' : got ? `${got} of ${x.items.length} checked` : `${x.items.length} item${x.items.length > 1 ? 's' : ''}`;
-      const ch = document.createElement('span'); ch.className = 'chev'; ch.textContent = '›'; ch.setAttribute('aria-hidden', 'true');
-      b.append(n, c, ch); b.onclick = () => showList(x.id);
-      li.append(b); return li;
+  let focusEl = null, selectEl = null;
+  $('listsList').replaceChildren(...state.lists.map(l => {
+    const open = expanded.has(l.id), got = l.items.filter(i => i.done).length;
+    const card = el('div', 'list-card' + (open ? ' open' : ''));
+    // header: tap to expand or collapse
+    const head = el('button', 'list-head'); head.type = 'button'; head.setAttribute('aria-expanded', open);
+    head.append(el('span', 'chev', '›'), el('span', 'ln', l.name),
+      el('span', 'lc', !l.items.length ? 'Empty' : got ? `${got} of ${l.items.length} checked` : `${l.items.length} item${l.items.length > 1 ? 's' : ''}`));
+    head.onclick = () => { open ? expanded.delete(l.id) : expanded.add(l.id); saveExpanded(); renderLists(); };
+    card.append(head);
+    if (!open) return card;
+
+    const body = el('div', 'list-body');
+    const bar = el('div', 'progress'); const fill = el('i'); fill.style.width = l.items.length ? `${got / l.items.length * 100}%` : '0'; bar.append(fill);
+    body.append(bar);
+    if (renaming === l.id) {
+      const f = el('form', 'add'); const inp = el('input'); inp.value = l.name; inp.maxLength = 60; inp.setAttribute('aria-label', 'List name');
+      const ok = el('button', 'primary', 'Save'); ok.type = 'submit';
+      const no = el('button', 'ghost', 'Cancel'); no.type = 'button'; no.onclick = () => { renaming = null; renderLists(); };
+      f.append(inp, ok, no);
+      f.onsubmit = e => { e.preventDefault(); const v = inp.value.trim(); if (!v) return; l.name = v; renaming = null; listsDoc.commit(); };
+      body.append(f); selectEl = inp;
+    }
+    const acts = el('div', 'list-actions');
+    const act = (label, title, fn, cls) => { const b = el('button', 'ghost' + (cls ? ' ' + cls : ''), label); b.type = 'button'; if (title) b.title = title; b.onclick = fn; acts.append(b); };
+    act('Use again', 'Uncheck every item so you can use this list again', () => { l.items.forEach(i => { i.done = false; }); listsDoc.commit(); });
+    act('Rename', '', () => { renaming = l.id; renderLists(); });
+    act('Copy', '', () => {
+      const copy = { id: newId(), name: `${l.name} (copy)`, items: l.items.map(i => ({ id: newId(), text: i.text, done: false })), created: Date.now() };
+      state.lists.splice(state.lists.indexOf(l) + 1, 0, copy); expanded.add(copy.id); saveExpanded(); renaming = copy.id; listsDoc.commit();
+    });
+    act('Delete', '', () => {
+      if (!confirm(`Delete "${l.name}"? This can't be undone.`)) return;
+      state.lists = state.lists.filter(x => x !== l); expanded.delete(l.id); saveExpanded(); listsDoc.commit();
+    }, 'danger');
+    body.append(acts);
+
+    const f = el('form', 'add'); const inp = el('input'); inp.placeholder = 'Add an item'; inp.maxLength = 120; inp.autocomplete = 'off';
+    inp.setAttribute('aria-label', `Add an item to ${l.name}`);
+    const add = el('button', 'primary', 'Add'); add.type = 'submit'; f.append(inp, add);
+    f.onsubmit = e => { e.preventDefault(); const v = inp.value.trim(); if (!v) return; l.items.push({ id: newId(), text: v, done: false }); listsDoc.commit(); renderLists(l.id); };
+    body.append(f);
+    if (focusId === l.id) focusEl = inp;
+
+    const ul = el('ul', 'list-items');
+    ul.append(...l.items.map(it => {
+      const li = el('li', it.done ? 'hit' : ''); li.dataset.id = it.id;
+      const grip = el('span', 'grip', '⋮⋮'); grip.setAttribute('aria-hidden', 'true'); grip.title = 'Drag to reorder';
+      const name = el('span', 'name', it.text);
+      const yes = el('button', 'mark yes', '✓'); yes.type = 'button';
+      yes.setAttribute('aria-label', `Check off "${it.text}"`); yes.setAttribute('aria-pressed', !!it.done);
+      yes.onclick = () => { it.done = !it.done; listsDoc.commit(); };
+      const del = el('button', 'del', '×'); del.type = 'button'; del.setAttribute('aria-label', `Remove "${it.text}" from this list`);
+      del.onclick = () => { l.items = l.items.filter(x => x !== it); listsDoc.commit(); };
+      li.append(grip, name, yes, del);
+      [grip, name].forEach(h => dragFrom(h, li, order => { l.items = order.map(id => l.items.find(x => x.id === id)).filter(Boolean); listsDoc.commit(); }));
+      return li;
     }));
-    $('listsHint').textContent = (!state.lists.length ? 'Make a list you come back to, like groceries or packing for a trip. Check things off as you go, then tap Use again to start fresh next time. ' : '') + offline;
-    return;
-  }
-  $('listTitle').textContent = l.name;
-  const got = l.items.filter(i => i.done).length;
-  $('listCount').textContent = l.items.length ? `${got}/${l.items.length}` : '';
-  $('listBar').style.width = l.items.length ? `${got / l.items.length * 100}%` : '0';
-  $('listItems').replaceChildren(...l.items.map(it => {
-    const li = document.createElement('li'); li.dataset.id = it.id; if (it.done) li.className = 'hit';
-    const grip = document.createElement('span'); grip.className = 'grip'; grip.textContent = '⋮⋮'; grip.setAttribute('aria-hidden', 'true'); grip.title = 'Drag to reorder';
-    const name = document.createElement('span'); name.className = 'name'; name.textContent = it.text;
-    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
-    yes.setAttribute('aria-label', `Check off "${it.text}"`); yes.setAttribute('aria-pressed', !!it.done);
-    yes.onclick = () => { it.done = !it.done; listsDoc.commit(); };
-    const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
-    del.setAttribute('aria-label', `Remove "${it.text}" from this list`);
-    del.onclick = () => { l.items = l.items.filter(x => x !== it); listsDoc.commit(); };
-    li.append(grip, name, yes, del);
-    [grip, name].forEach(h => dragFrom(h, li, order => {
-      l.items = order.map(id => l.items.find(x => x.id === id)).filter(Boolean); listsDoc.commit();
-    }));
-    return li;
+    body.append(ul);
+    if (!l.items.length) body.append(el('p', 'hint', 'Add what belongs on this list. It stays saved, so you can reuse it any time.'));
+    else if (got === l.items.length) body.append(el('p', 'hint', 'Everything is checked. Tap Use again to uncheck it all for next time.'));
+    card.append(body);
+    return card;
   }));
-  $('listHint2').textContent = (!l.items.length ? 'Add what belongs on this list. It stays saved, so you can reuse it any time. '
-    : got === l.items.length ? 'Everything is checked. Tap Use again to uncheck it all for next time. ' : '') + offline;
+  if (selectEl) selectEl.select(); else if (focusEl) focusEl.focus();
+  $('listsHint').textContent = (!state.lists.length ? 'Make a list you come back to, like groceries or packing for a trip. Check things off as you go, then tap Use again to start fresh next time. ' : '') + offline;
 }
 $('newListForm').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('newListName').value.trim(); if (!v) return;
   const l = { id: newId(), name: v, items: [], created: Date.now() };
   state.lists.push(l); $('newListName').value = '';
-  listsDoc.commit(); showList(l.id);
+  expanded.add(l.id); saveExpanded();
+  listsDoc.commit(); renderLists(l.id);
 });
-$('listItemForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const l = openList(), v = $('newListItem').value.trim(); if (!l || !v) return;
-  l.items.push({ id: newId(), text: v, done: false });
-  $('newListItem').value = '';
-  listsDoc.commit();
-});
-$('listBack').onclick = () => showList(null);
-$('listNew').onclick = () => { showList(null); $('newListName').focus(); };
-$('listReset').onclick = () => { const l = openList(); l.items.forEach(i => { i.done = false; }); listsDoc.commit(); };
-$('listRename').onclick = () => { $('renameForm').hidden = false; $('renameInput').value = openList().name; $('renameInput').select(); };
-$('renameCancel').onclick = () => { $('renameForm').hidden = true; };
-$('renameForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const v = $('renameInput').value.trim(); if (!v) return;
-  openList().name = v; $('renameForm').hidden = true; listsDoc.commit();
-});
-$('listCopy').onclick = () => {
-  const l = openList();
-  const copy = { id: newId(), name: `${l.name} (copy)`, items: l.items.map(i => ({ id: newId(), text: i.text, done: false })), created: Date.now() };
-  state.lists.splice(state.lists.indexOf(l) + 1, 0, copy);
-  listsDoc.commit(); showList(copy.id);
-};
-$('listDelete').onclick = () => {
-  const l = openList();
-  if (!confirm(`Delete "${l.name}"? This can't be undone.`)) return;
-  state.lists = state.lists.filter(x => x !== l);
-  listsDoc.commit(); showList(null);
-};
 
 // ---- Habits / To-do / My lists switch (remembered on this device)
 const TABS = { habits: ['tabHabits', 'habitsView'], todo: ['tabTodo', 'todoView'], lists: ['tabLists', 'listsView'] };
@@ -938,11 +908,7 @@ function showTab(name) {
   for (const [k, [tab, view]] of Object.entries(TABS)) { $(view).hidden = k !== name; $(tab).setAttribute('aria-selected', k === name); }
   try { localStorage.setItem(KEY + '.tab', name); } catch (e) {}
 }
-for (const k of Object.keys(TABS)) $(TABS[k][0]).onclick = () => {
-  // tapping My lists again while a list is open goes back to all lists
-  if (k === 'lists' && !$('listsView').hidden && openListId) showList(null);
-  showTab(k);
-};
+for (const k of Object.keys(TABS)) $(TABS[k][0]).onclick = () => showTab(k);
 try { showTab(localStorage.getItem(KEY + '.tab') || 'habits'); } catch (e) {}
 
 $('addForm').addEventListener('submit', e => {
