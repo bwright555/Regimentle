@@ -268,6 +268,10 @@ function streak() {
   while (perfect(k(d))) { n++; d.setDate(d.getDate() - 1); }
   return n;
 }
+function perfectDays() {
+  // every day, ever, where each habit was marked done (today counts once it is perfect)
+  return Object.values(state.days).filter(day => { const s = dayScore(day); return s.total > 0 && s.done === s.total; }).length;
+}
 function activityStreak(text) {
   // consecutive days this activity was marked done, counting back from today.
   // Today only counts once it is ✓; while it is unmarked the run through yesterday is still alive, and a ✕ ends it.
@@ -324,7 +328,8 @@ function render() {
   $('sToday').textContent = `${done}/${tasks.length}`;
   const c = career(); if (day.example) { c.done += done; c.total += tasks.length; }
   $('sCareer').textContent = pct(c.done, c.total);
-  $('sStreak').textContent = streak();
+  $('sStreak').textContent = perfectDays();
+  const run = streak(); $('sStreak').parentElement.title = run > 1 ? `${run} perfect days in a row` : 'Days where every habit was done';
 
   const list = $('list'); list.innerHTML = '';
   tasks.forEach((t, i) => {
