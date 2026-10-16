@@ -111,6 +111,17 @@ details summary { cursor: pointer; }
 .habits .meta { font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 @media (max-width: 420px) { .alltime .totals { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.pop { animation: none; } }
+/* Habits / To-do switch */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.tabs button { background: transparent; color: var(--muted); border: none; padding: 8px 10px; }
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
+.view { display: flex; flex-direction: column; gap: 28px; }
+.todo-count { color: var(--muted); font-size: .95rem; text-align: center; margin: 0; }
+.todo-count b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.todos li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
+.todos .when { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
 html { color-scheme: light; }
 [hidden] { display: none !important; }
 body { margin: 0; }
@@ -171,6 +182,32 @@ body { margin: 0; }
     </div>
   </section>
 
+  <div class="tabs" role="tablist" aria-label="Choose a list">
+    <button type="button" role="tab" id="tabHabits" aria-controls="habitsView" aria-selected="true">Habits</button>
+    <button type="button" role="tab" id="tabTodo" aria-controls="todoView" aria-selected="false">To-do</button>
+  </div>
+
+  <div class="view" id="todoView" role="tabpanel" aria-labelledby="tabTodo" hidden>
+    <p class="todo-count" id="todoCount"></p>
+    <section>
+      <p class="label">To-do list</p>
+      <form class="add" id="todoForm">
+        <input id="newTodo" placeholder="Add a to-do" autocomplete="off" maxlength="120">
+        <button class="primary" type="submit">Add</button>
+      </form>
+      <ul class="todos" id="todoList"></ul>
+      <p class="hint" id="todoHint"></p>
+    </section>
+    <section>
+      <details id="todoDoneWrap">
+        <summary class="label" id="todoDoneHead">Done</summary>
+        <div class="done-head" style="margin-top:10px"><p class="hint">Checked-off to-dos stay here until you clear them.</p><button class="ghost" id="todoClear" type="button">Clear all</button></div>
+        <ul class="todos" id="todoDone" style="margin-top:10px"></ul>
+      </details>
+    </section>
+  </div>
+
+  <div class="view" id="habitsView" role="tabpanel" aria-labelledby="tabHabits">
   <div class="board" id="board" aria-label="Today's tiles"></div>
 
   <div class="stats">
@@ -218,6 +255,7 @@ body { margin: 0; }
       <ul class="history" id="history" style="margin-top:10px"></ul>
     </details>
   </section>
+  </div>
 </main>
 
 <script>
@@ -230,6 +268,7 @@ let state;
 function load() {
   try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
   if (!state || !state.days) state = { days: {} };
+  if (!Array.isArray(state.todos)) state.todos = [];
   ensureToday();
 }
 function ensureToday() {
@@ -519,6 +558,7 @@ async function pull() {
   if (ex && !Object.keys(server).length) state.days[todayKey()] = ex;
   ensureToday(); save(); render();
   if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
+  pullTodos();
 }
 // "Join N people…" line. Needs the user_count() function from setup.sql; stays hidden until it exists.
 async function showUserCount() {
@@ -599,6 +639,83 @@ $('signOut').onclick = async () => {
 
 function commit() { save(); render(); queueWrite([todayKey()]); }
 
+// ---- To-do list: one-off tasks, separate from habits. They don't carry over or count toward any score.
+// Synced as a single row per person in the todos table (see setup.sql); until that table exists they stay on this device.
+let todoTimer = null, todoWriting = false, todoDirty = false, todoCloud = true;
+const shortDate = ts => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function renderTodos() {
+  const open = state.todos.filter(t => !t.done), done = state.todos.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt);
+  const doneToday = done.filter(t => new Date(t.doneAt).toDateString() === new Date().toDateString()).length;
+  const cnt = $('todoCount'); cnt.textContent = '';
+  cnt.append(Object.assign(document.createElement('b'), { textContent: open.length }), ` to do · `,
+    Object.assign(document.createElement('b'), { textContent: doneToday }), ` done today`);
+  const item = t => {
+    const li = document.createElement('li'); if (t.done) li.className = 'hit';
+    const name = document.createElement('span'); name.className = 'name'; name.textContent = t.text;
+    const when = document.createElement('span'); when.className = 'when';
+    when.textContent = t.done ? `Done ${shortDate(t.doneAt)}` : `Added ${shortDate(t.created)}`;
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
+    yes.setAttribute('aria-label', t.done ? `Move "${t.text}" back to your list` : `Check off "${t.text}"`); yes.setAttribute('aria-pressed', !!t.done);
+    yes.onclick = () => { t.done = !t.done; t.doneAt = t.done ? Date.now() : null; commitTodos(); };
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+    del.setAttribute('aria-label', `Delete "${t.text}"`);
+    del.onclick = () => { state.todos = state.todos.filter(x => x !== t); commitTodos(); };
+    li.append(name, when, yes, del);
+    return li;
+  };
+  $('todoList').replaceChildren(...open.map(item));
+  $('todoDone').replaceChildren(...done.map(item));
+  $('todoDoneWrap').hidden = !done.length;
+  $('todoDoneHead').textContent = `Done (${done.length})`;
+  $('todoHint').textContent = !state.todos.length ? 'Add one-off tasks here. They stay on your list until you check them off, and they don\'t affect your habit scores.'
+    : !open.length ? 'All clear. Nothing left to do.' : '';
+  if (user && !todoCloud) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
+}
+function commitTodos() {
+  save(); renderTodos();
+  if (!user) return;
+  todoDirty = true; clearTimeout(todoTimer); todoTimer = setTimeout(flushTodos, 600);
+}
+async function flushTodos() {
+  todoTimer = null;
+  if (todoWriting) { todoTimer = setTimeout(flushTodos, 300); return; }
+  todoWriting = true; todoDirty = false;
+  try {
+    const { error } = await sb.from('todos').upsert({ user_id: user.id, items: state.todos, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    todoCloud = true;
+  } catch (e) { console.error(e); todoCloud = false; }
+  finally { todoWriting = false; renderTodos(); }
+}
+async function pullTodos() {
+  if (!user || todoTimer || todoWriting) return;
+  const { data, error } = await sb.from('todos').select('items').eq('user_id', user.id).maybeSingle();
+  if (error) { console.error(error); todoCloud = false; renderTodos(); return; }
+  todoCloud = true;
+  if (data && Array.isArray(data.items)) { state.todos = data.items; save(); renderTodos(); }
+  else if (state.todos.length) commitTodos(); // first sign-in on this device: upload what's here
+  else renderTodos();
+}
+$('todoForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('newTodo').value.trim(); if (!v) return;
+  state.todos.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, created: Date.now(), doneAt: null });
+  $('newTodo').value = '';
+  commitTodos();
+});
+$('todoClear').onclick = () => { state.todos = state.todos.filter(t => !t.done); commitTodos(); };
+
+// ---- Habits / To-do switch (remembered on this device)
+function showTab(name) {
+  const todo = name === 'todo';
+  $('todoView').hidden = !todo; $('habitsView').hidden = todo;
+  $('tabTodo').setAttribute('aria-selected', todo); $('tabHabits').setAttribute('aria-selected', !todo);
+  try { localStorage.setItem(KEY + '.tab', name); } catch (e) {}
+}
+$('tabHabits').onclick = () => showTab('habits');
+$('tabTodo').onclick = () => showTab('todo');
+try { if (localStorage.getItem(KEY + '.tab') === 'todo') showTab('todo'); } catch (e) {}
+
 $('addForm').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('newTask').value.trim(); if (!v) return;
@@ -635,7 +752,7 @@ $('copyBtn').onclick = () => {
 let current = todayKey();
 setInterval(() => { if (todayKey() !== current) { current = todayKey(); ensureToday(); render(); } }, 60000);
 
-load(); render();
+load(); render(); renderTodos();
 connect();
 </script>
 </body>

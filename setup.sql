@@ -24,3 +24,17 @@ set search_path = ''
 as $$ select count(*) from auth.users $$;
 
 grant execute on function public.user_count() to anon, authenticated;
+
+-- To-do list (separate from habits). One row per person holding their whole list.
+create table if not exists public.todos (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  items      jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.todos enable row level security;
+
+create policy "read own todos"   on public.todos for select using (auth.uid() = user_id);
+create policy "insert own todos" on public.todos for insert with check (auth.uid() = user_id);
+create policy "update own todos" on public.todos for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "delete own todos" on public.todos for delete using (auth.uid() = user_id);
