@@ -542,7 +542,16 @@ function renderHistory() {
 // ---- Account sync (Supabase). Each signed-in person has one row per day in
 // regimen_days, readable and writable only by them (see setup.sql).
 const CFG = window.REGIMENTLE_CONFIG || {};
-let sb = null, user = null, dirty = new Set(), writeTimer = null, writing = false;
+let sb = null, user = null, authReady = false, writeTimer = null, writing = false;
+// Changes not yet confirmed by the server are remembered on this device, so a reload, a closed tab or a
+// dropped connection can't let the older account copy overwrite them. They are pushed on the next sync.
+let pending = {};
+try { pending = JSON.parse(localStorage.getItem(KEY + '.pending')) || {}; } catch (e) {}
+const savePending = () => { try { localStorage.setItem(KEY + '.pending', JSON.stringify(pending)); } catch (e) {} };
+// Signed out (after the sign-in check finishes) means there's no account to save to.
+const offAccount = () => authReady && !user;
+const dirty = new Set(pending.days || []);
+const markDays = () => { pending.days = [...dirty]; if (!dirty.size) delete pending.days; savePending(); };
 function setSync(text, cls) { const el = $('sync'); el.textContent = text; el.className = 'sync' + (cls ? ' ' + cls : ''); }
 function showAccount() {
   $('signInHint').hidden = !!user; $('who').hidden = !user; $('googleBtn').hidden = !!user; $('pwBox').hidden = !!user;
@@ -550,8 +559,9 @@ function showAccount() {
   if (!user) setSync('Saved on this device only. Sign in to keep your progress.', 'warn');
 }
 function queueWrite(days) {
+  if (offAccount()) return;
+  days.forEach(d => dirty.add(d)); markDays();
   if (!user) return;
-  days.forEach(d => dirty.add(d));
   setSync('Saving…');
   clearTimeout(writeTimer);
   writeTimer = setTimeout(flush, 600);
@@ -560,8 +570,8 @@ async function flush() {
   writeTimer = null;
   if (writing) { writeTimer = setTimeout(flush, 300); return; }
   writing = true;
+  const keys = [...dirty]; dirty.clear();
   try {
-    const keys = [...dirty]; dirty.clear();
     const up = [], del = [];
     keys.forEach(k => { const d = state.days[k]; (d && !d.example && d.tasks.length ? up : del).push(k); });
     if (up.length) {
@@ -572,9 +582,11 @@ async function flush() {
       const { error } = await sb.from('regimen_days').delete().eq('user_id', user.id).in('day', del);
       if (error) throw error;
     }
+    markDays();
     setSync('Saved to your account', 'ok');
   } catch (e) {
     console.error(e);
+    keys.forEach(k => dirty.add(k)); markDays();
     setSync('Could not reach your account. Your progress is kept on this device and will save on your next change.', 'warn');
   } finally { writing = false; }
 }
@@ -582,10 +594,12 @@ async function pull() {
   if (!user || writeTimer || writing) return;
   const { data, error } = await sb.from('regimen_days').select('day,tasks').eq('user_id', user.id);
   if (error) { console.error(error); setSync('Could not load your account. Showing what is saved on this device.', 'warn'); return; }
+  if (writeTimer || writing) return; // a change was made while loading; it wins and saves shortly
   const server = {};
   data.forEach(r => { server[r.day] = { tasks: r.tasks, example: false }; });
-  // days tracked on this device that the account doesn't have yet get uploaded
-  const localOnly = Object.keys(state.days).filter(k => !server[k] && !state.days[k].example && state.days[k].tasks.some(t => t.done !== null) );
+  // days tracked on this device that the account doesn't have yet get uploaded,
+  // and so do days changed here that never finished saving
+  const localOnly = Object.keys(state.days).filter(k => (dirty.has(k) || !server[k]) && !state.days[k].example && (dirty.has(k) || state.days[k].tasks.some(t => t.done !== null)));
   const ex = today() && today().example ? today() : null;
   localOnly.forEach(k => { server[k] = state.days[k]; });
   state.days = server;
@@ -594,7 +608,7 @@ async function pull() {
   if (ex && !Object.keys(server).length) state.days[todayKey()] = ex;
   ensureToday(); save(); render();
   if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
-  pullTodos(); listsDoc.pull();
+  todosDoc.pull(); listsDoc.pull();
 }
 // "Join N people…" line. Needs the user_count() function from setup.sql; stays hidden until it exists.
 async function showUserCount() {
@@ -620,10 +634,14 @@ function connect() {
     if (event === 'PASSWORD_RECOVERY') { $('newPwForm').hidden = false; $('newPass').focus(); }
     const next = session ? session.user : null;
     const changed = (next && next.id) !== (user && user.id);
-    user = next; showAccount();
+    user = next; authReady = true; showAccount();
     if (changed && user) { setSync('Loading your saved progress…'); pull(); }
   });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pull();
+    else saveNow(); // leaving the app: don't wait out the save delay, the page may be closed
+  });
+  addEventListener('pagehide', saveNow);
 }
 $('googleBtn').onclick = async () => {
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
@@ -674,10 +692,14 @@ $('signOut').onclick = async () => {
 };
 
 function commit() { save(); render(); queueWrite([todayKey()]); }
+function saveNow() {
+  if (!user) return;
+  if (writeTimer) { clearTimeout(writeTimer); flush(); }
+  todosDoc.hurry(); listsDoc.hurry();
+}
 
 // ---- To-do list: one-off tasks, separate from habits. They don't carry over or count toward any score.
 // Synced as a single row per person in the todos table (see setup.sql); until that table exists they stay on this device.
-let todoTimer = null, todoWriting = false, todoDirty = false, todoCloud = true;
 const shortDate = ts => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 function renderTodos() {
   const open = state.todos.filter(t => !t.done), done = state.todos.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt);
@@ -712,7 +734,7 @@ function renderTodos() {
   $('todoDoneHead').textContent = `Done (${done.length})`;
   $('todoHint').textContent = !state.todos.length ? 'Add one-off tasks here. They stay on your list until you check them off, and they don\'t affect your habit scores.'
     : !open.length ? 'All clear. Nothing left to do.' : '';
-  if (user && !todoCloud) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
+  if (user && !todosDoc.ok) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
 }
 // Drag a row (by its handle or name) to a new spot; onDrop gets the new order of row ids.
 // Pointer events cover mouse, touch and pen.
@@ -750,31 +772,8 @@ function pruneTodos() {
   if (keep.length === state.todos.length) return false;
   state.todos = keep; return true;
 }
-function commitTodos() {
-  save(); renderTodos();
-  if (!user) return;
-  todoDirty = true; clearTimeout(todoTimer); todoTimer = setTimeout(flushTodos, 600);
-}
-async function flushTodos() {
-  todoTimer = null;
-  if (todoWriting) { todoTimer = setTimeout(flushTodos, 300); return; }
-  todoWriting = true; todoDirty = false;
-  try {
-    const { error } = await sb.from('todos').upsert({ user_id: user.id, items: state.todos, updated_at: new Date().toISOString() });
-    if (error) throw error;
-    todoCloud = true;
-  } catch (e) { console.error(e); todoCloud = false; }
-  finally { todoWriting = false; renderTodos(); }
-}
-async function pullTodos() {
-  if (!user || todoTimer || todoWriting) return;
-  const { data, error } = await sb.from('todos').select('items').eq('user_id', user.id).maybeSingle();
-  if (error) { console.error(error); todoCloud = false; renderTodos(); return; }
-  todoCloud = true;
-  if (data && Array.isArray(data.items)) { state.todos = data.items; if (pruneTodos()) commitTodos(); else { save(); renderTodos(); } }
-  else if (state.todos.length) commitTodos(); // first sign-in on this device: upload what's here
-  else renderTodos();
-}
+const todosDoc = cloudDoc('todos', () => state.todos, v => { state.todos = v; pruneTodos(); }, renderTodos);
+const commitTodos = () => todosDoc.commit();
 $('todoForm').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('newTodo').value.trim(); if (!v) return;
@@ -784,38 +783,66 @@ $('todoForm').addEventListener('submit', e => {
 });
 $('todoClear').onclick = () => { state.todos = state.todos.filter(t => !t.done); commitTodos(); };
 
-// ---- My lists: reusable checklists (groceries, packing) that can be added to, reset, copied, renamed and deleted.
-// Synced as one row per person in the lists table (see setup.sql); until that table exists they stay on this device.
+// One row per person holding a whole collection (to-dos, lists). A change that hasn't reached the server
+// yet stays marked as pending on this device, and the next sync merges it with the server's copy and pushes it.
 function cloudDoc(table, get, set, after) {
-  let timer = null, writing = false;
+  let timer = null, writing = false, rev = 0, loaded = false;
   const doc = { ok: true };
+  // ids the server had at the last sync: a server item missing here was deleted here; one not in base is new from elsewhere
+  const baseKey = KEY + '.base.' + table;
+  const setBase = items => { try { localStorage.setItem(baseKey, JSON.stringify(items.map(x => x.id))); } catch (e) {} };
+  const merge = server => {
+    let base; try { base = new Set(JSON.parse(localStorage.getItem(baseKey)) || []); } catch (e) { base = new Set(); }
+    const local = get(), ids = new Set(local.map(x => x.id));
+    return [...local, ...server.filter(x => !ids.has(x.id) && !base.has(x.id))];
+  };
   doc.commit = () => {
     save(); after();
+    if (offAccount()) return;
+    rev++; pending[table] = true; savePending();
     if (!user) return;
     clearTimeout(timer); timer = setTimeout(doc.flush, 600);
   };
+  doc.hurry = () => { if (timer) { clearTimeout(timer); doc.flush(); } };
   doc.flush = async () => {
     timer = null;
     if (writing) { timer = setTimeout(doc.flush, 300); return; }
     writing = true;
     try {
-      const { error } = await sb.from(table).upsert({ user_id: user.id, items: get(), updated_at: new Date().toISOString() });
+      if (!loaded) {
+        // never write before reading the account once, so a change made while it loads can't replace it
+        const { data, error } = await sb.from(table).select('items').eq('user_id', user.id).maybeSingle();
+        if (error) throw error;
+        loaded = true;
+        set(merge(data && Array.isArray(data.items) ? data.items : [])); save(); after();
+      }
+    } catch (e) { console.error(e); doc.ok = false; writing = false; after(); return; }
+    const sent = rev, items = get();
+    try {
+      const { error } = await sb.from(table).upsert({ user_id: user.id, items, updated_at: new Date().toISOString() });
       if (error) throw error;
-      doc.ok = true;
+      doc.ok = true; setBase(items);
+      if (rev === sent) { delete pending[table]; savePending(); }
     } catch (e) { console.error(e); doc.ok = false; }
     finally { writing = false; after(); }
   };
   doc.pull = async () => {
-    if (!user || timer || writing) return;
+    if (!user || (loaded && (timer || writing))) return;
     const { data, error } = await sb.from(table).select('items').eq('user_id', user.id).maybeSingle();
     if (error) { console.error(error); doc.ok = false; after(); return; }
-    doc.ok = true;
-    if (data && Array.isArray(data.items)) { set(data.items); save(); after(); }
-    else if (get().length) doc.commit(); // first sign-in on this device: upload what's here
-    else after();
+    doc.ok = true; loaded = true;
+    const items = data && Array.isArray(data.items) ? data.items : [];
+    if (timer || writing || pending[table] || (!data && get().length)) {
+      // changed here while loading, never finished saving, or first sign-in: keep this device's changes,
+      // add anything new from the account, and save the result
+      set(merge(items)); save(); after();
+      if (!timer && !writing) doc.flush();
+    } else { set(items); setBase(items); save(); after(); }
   };
   return doc;
 }
+// ---- My lists: reusable checklists (groceries, packing) that can be added to, reset, copied, renamed and deleted.
+// Synced as one row per person in the lists table (see setup.sql); until that table exists they stay on this device.
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const listsDoc = cloudDoc('lists', () => state.lists, v => { state.lists = v; }, renderLists);
 // Which lists are expanded and which one is being renamed (expanded ones are remembered on this device)
