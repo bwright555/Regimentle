@@ -142,6 +142,13 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 .progress i { display: block; height: 100%; background: var(--hit); transition: width .25s; }
 .list-items li.hit .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--hit); }
 @media (max-width: 420px) { .list-actions { grid-template-columns: repeat(2, 1fr); } }
+.flag { width: 36px; height: 36px; padding: 0; font-size: 1rem; line-height: 1; border: 2px solid var(--line); background: transparent; color: var(--muted); }
+.flag[aria-pressed="true"] { background: var(--open); border-color: var(--open); color: #1b2230; }
+.flagged { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 2px solid var(--open); border-radius: 6px; }
+.flag-head { color: var(--open); }
+#todoFlagged .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+#todoFlagged li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
+@media (max-width: 420px) { .todos li:not(.hit) .when { display: none; } }
 .done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
 html { color-scheme: light; }
@@ -230,6 +237,11 @@ body { margin: 0; }
         <input id="newTodo" placeholder="Add a to-do" autocomplete="off" maxlength="120">
         <button class="primary" type="submit">Add</button>
       </form>
+      <div class="flagged" id="flagWrap" hidden>
+        <p class="label flag-head" id="flagHead">⚑ Flagged</p>
+        <ul class="todos" id="todoFlagged"></ul>
+      </div>
+      <p class="label" id="restHead" hidden>Everything else</p>
       <ul class="todos" id="todoList"></ul>
       <p class="hint" id="todoHint"></p>
     </section>
@@ -720,15 +732,41 @@ function renderTodos() {
     when.textContent = t.done ? `Done ${shortDate(t.doneAt)}` : `Added ${shortDate(t.created)}`;
     const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
     yes.setAttribute('aria-label', t.done ? `Move "${t.text}" back to your list` : `Check off "${t.text}"`); yes.setAttribute('aria-pressed', !!t.done);
-    yes.onclick = () => { t.done = !t.done; t.doneAt = t.done ? Date.now() : null; commitTodos(); };
+    yes.onclick = () => {
+      t.done = !t.done; t.doneAt = t.done ? Date.now() : null;
+      // coming back from Done when the flagged spots are full: it returns unflagged
+      if (!t.done && t.flagged && flaggedCount() > MAX_FLAGGED) t.flagged = false;
+      commitTodos();
+    };
+    let flag = null;
+    if (!t.done) {
+      flag = document.createElement('button'); flag.type = 'button'; flag.className = 'flag'; flag.textContent = '⚑';
+      flag.setAttribute('aria-pressed', !!t.flagged);
+      flag.setAttribute('aria-label', t.flagged ? `Unflag "${t.text}"` : `Flag "${t.text}" as a top priority`);
+      flag.title = t.flagged ? 'Unflag' : `Flag as a top priority (up to ${MAX_FLAGGED})`;
+      flag.onclick = () => {
+        if (!t.flagged && flaggedCount() >= MAX_FLAGGED) {
+          alert(`You can flag up to ${MAX_FLAGGED} to-dos. Unflag one first to make room.`);
+          return;
+        }
+        t.flagged = !t.flagged;
+        // a newly flagged to-do joins the bottom of the flagged group
+        if (t.flagged) { state.todos = state.todos.filter(x => x !== t); state.todos.push(t); }
+        commitTodos();
+      };
+    }
     const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
     del.setAttribute('aria-label', `Delete "${t.text}"`);
     del.onclick = () => { state.todos = state.todos.filter(x => x !== t); commitTodos(); };
-    li.append(name, when, yes, del);
+    li.append(name, when); if (flag) li.append(flag); li.append(yes, del);
     if (!t.done) [li.querySelector('.grip'), name].forEach(h => dragFrom(h, li, reorderTodos));
     return li;
   };
-  $('todoList').replaceChildren(...open.map(item));
+  const flagged = open.filter(t => t.flagged), rest = open.filter(t => !t.flagged);
+  $('todoFlagged').replaceChildren(...flagged.map(item));
+  $('todoList').replaceChildren(...rest.map(item));
+  $('flagWrap').hidden = !flagged.length; $('restHead').hidden = !flagged.length || !rest.length;
+  $('flagHead').textContent = `⚑ Flagged (${flagged.length} of ${MAX_FLAGGED})`;
   $('todoDone').replaceChildren(...done.map(item));
   $('todoDoneWrap').hidden = !done.length;
   $('todoDoneHead').textContent = `Done (${done.length})`;
@@ -760,11 +798,15 @@ function dragFrom(handle, li, onDrop) {
     addEventListener('pointermove', move); addEventListener('pointerup', end); addEventListener('pointercancel', end);
   });
 }
+// Reorder one group (flagged or everything else) in place: its items take back the same slots in new order.
 function reorderTodos(order) {
-  const open = order.map(id => state.todos.find(t => t.id === id)).filter(Boolean);
-  state.todos = [...open, ...state.todos.filter(t => !open.includes(t))];
+  const moved = order.map(id => state.todos.find(t => t.id === id)).filter(Boolean);
+  const slots = state.todos.map((t, i) => moved.includes(t) ? i : -1).filter(i => i >= 0);
+  slots.forEach((slot, j) => { state.todos[slot] = moved[j]; });
   commitTodos();
 }
+const MAX_FLAGGED = 5;
+const flaggedCount = () => state.todos.filter(t => t.flagged && !t.done).length;
 // Checked-off to-dos disappear 24 hours after they were finished.
 const TODO_KEEP_MS = 24 * 60 * 60 * 1000;
 function pruneTodos() {
