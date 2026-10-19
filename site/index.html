@@ -176,6 +176,8 @@ main { position: relative; }
 .dw-sessions li { font-size: .85rem; padding: 4px 4px 4px 10px; }
 .dw-sessions li .name { color: var(--muted); }
 .dw-sessions li b { font-variant-numeric: tabular-nums; }
+input.edit { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 2px solid var(--accent); background: var(--surface); color: var(--fg); border-radius: 4px; }
+input.edit:focus { outline: none; }
 .done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
 html { color-scheme: light; }
@@ -805,7 +807,10 @@ function renderTodos() {
     del.setAttribute('aria-label', `Delete "${t.text}"`);
     del.onclick = () => { state.todos = state.todos.filter(x => x !== t); commitTodos(); };
     li.append(name, when); if (flag) li.append(flag); li.append(yes, del);
-    if (!t.done) [li.querySelector('.grip'), name].forEach(h => dragFrom(h, li, reorderTodos));
+    const edit = () => editInPlace(name, t.text, v => { t.text = v; commitTodos(); });
+    name.title = t.done ? 'Tap to edit' : 'Tap to edit, drag to move';
+    if (!t.done) { dragFrom(li.querySelector('.grip'), li, reorderTodos); dragFrom(name, li, reorderTodos, edit); }
+    else name.onclick = edit;
     return li;
   };
   const flagged = open.filter(t => t.flagged), rest = open.filter(t => !t.flagged);
@@ -820,9 +825,23 @@ function renderTodos() {
     : !open.length ? 'All clear. Nothing left to do.' : '';
   if (user && !todosDoc.ok) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
 }
+// Swap a row's text for an input. Enter or tapping away saves, Escape cancels.
+function editInPlace(nameEl, text, save) {
+  const inp = document.createElement('input');
+  inp.className = 'edit'; inp.value = text; inp.maxLength = 120; inp.setAttribute('aria-label', 'Edit to-do');
+  let done = false;
+  const finish = keep => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (keep && v && v !== text) save(v); else inp.replaceWith(nameEl);
+  };
+  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+  nameEl.replaceWith(inp); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+}
 // Drag a row (by its handle or name) to a new spot; onDrop gets the new order of row ids.
 // Pointer events cover mouse, touch and pen.
-function dragFrom(handle, li, onDrop) {
+function dragFrom(handle, li, onDrop, onTap) {
   handle.addEventListener('pointerdown', e => {
     if (e.button) return;
     e.preventDefault();
@@ -837,7 +856,7 @@ function dragFrom(handle, li, onDrop) {
     const end = () => {
       removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
       li.classList.remove('dragging'); document.body.classList.remove('dragging');
-      if (!moved) return;
+      if (!moved) { if (onTap) onTap(); return; }
       onDrop([...list.children].map(x => x.dataset.id));
     };
     // listen on the window: moving the row in the page would drop pointer capture on the handle
