@@ -762,6 +762,9 @@ function saveNow() {
 // Synced as a single row per person in the todos table (see setup.sql); until that table exists they stay on this device.
 const shortDate = ts => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 function renderTodos() {
+  // a background save or sync must not wipe out a to-do that's being edited; it re-renders once editing ends
+  const editing = document.activeElement;
+  if (editing && editing.classList.contains('edit') && $('todoView').contains(editing)) return;
   const open = state.todos.filter(t => !t.done), done = state.todos.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt);
   const doneToday = done.filter(t => new Date(t.doneAt).toDateString() === new Date().toDateString()).length;
   const cnt = $('todoCount'); cnt.textContent = '';
@@ -833,7 +836,8 @@ function editInPlace(nameEl, text, save) {
   const finish = keep => {
     if (done) return; done = true;
     const v = inp.value.trim();
-    if (keep && v && v !== text) save(v); else inp.replaceWith(nameEl);
+    inp.replaceWith(nameEl);
+    if (keep && v && v !== text) save(v);
   };
   inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') finish(false); };
   inp.onblur = () => finish(true);
@@ -846,7 +850,10 @@ function dragFrom(handle, li, onDrop, onTap) {
     if (e.button) return;
     e.preventDefault();
     const list = li.parentElement; let moved = false;
+    const x0 = e.clientX, y0 = e.clientY;
     const move = ev => {
+      // a tap wobbles a few pixels; only a real move starts a drag
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
       if (!moved) { moved = true; li.classList.add('dragging'); document.body.classList.add('dragging'); }
       const mid = el => { const b = el.getBoundingClientRect(); return b.top + b.height / 2; };
       let prev, next;
