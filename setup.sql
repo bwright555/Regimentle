@@ -52,3 +52,17 @@ create policy "read own lists"   on public.lists for select using (auth.uid() = 
 create policy "insert own lists" on public.lists for insert with check (auth.uid() = user_id);
 create policy "update own lists" on public.lists for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "delete own lists" on public.lists for delete using (auth.uid() = user_id);
+
+-- Deep work timer. One row per person holding every logged session.
+create table if not exists public.deep_work (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  items      jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.deep_work enable row level security;
+
+create policy "read own deep work"   on public.deep_work for select using (auth.uid() = user_id);
+create policy "insert own deep work" on public.deep_work for insert with check (auth.uid() = user_id);
+create policy "update own deep work" on public.deep_work for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "delete own deep work" on public.deep_work for delete using (auth.uid() = user_id);

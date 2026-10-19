@@ -149,6 +149,33 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 #todoFlagged .name { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
 #todoFlagged li.dragging { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .18); position: relative; z-index: 1; }
 @media (max-width: 420px) { .todos li:not(.hit) .when { display: none; } }
+/* Deep work: a small link in the top-right corner that opens a stopwatch panel */
+main { position: relative; }
+@media (max-width: 600px) { header { padding-top: 22px; } } /* keep the corner link clear of the title on phones */
+.dw-link { position: absolute; top: -12px; right: 0; background: none; border: 1px solid transparent; color: var(--muted); font: 500 .8rem var(--body); padding: 4px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.dw-link:hover { color: var(--fg); border-color: var(--line); }
+.dw-link.running { color: var(--hit); border-color: var(--hit); }
+.dw-panel { position: absolute; top: 18px; right: 0; z-index: 20; width: min(320px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 30px rgb(0 0 0 / .18); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.dw-top { display: flex; align-items: center; justify-content: space-between; }
+.dw-close { background: none; border: none; color: var(--muted); padding: 2px 6px; font-size: 1.2rem; line-height: 1; }
+.dw-clock { font: 500 2.4rem/1 var(--mono); text-align: center; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.dw-panel.running .dw-clock { color: var(--hit); }
+.dw-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dw-btns .link { grid-column: 1 / -1; background: none; border: none; color: var(--muted); font-size: .8rem; font-weight: 500; text-decoration: underline; padding: 0; }
+.dw-btns button:disabled { opacity: .45; cursor: default; }
+.dw-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+.dw-totals b { display: block; font: 800 1rem/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.dw-totals span { font-size: .65rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.dw-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; align-items: end; height: 72px; }
+.dw-week div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; }
+.dw-week i { width: 100%; max-width: 22px; background: var(--hit); border-radius: 3px 3px 0 0; min-height: 2px; }
+.dw-week i.zero { background: var(--line); }
+.dw-week span { font-size: .65rem; color: var(--muted); }
+.dw-week .today span { color: var(--fg); font-weight: 600; }
+.dw-sessions { gap: 4px; }
+.dw-sessions li { font-size: .85rem; padding: 4px 4px 4px 10px; }
+.dw-sessions li .name { color: var(--muted); }
+.dw-sessions li b { font-variant-numeric: tabular-nums; }
 .done-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .done-head button { padding: 2px 8px; font-size: .8rem; white-space: nowrap; }
 html { color-scheme: light; }
@@ -177,6 +204,24 @@ body { margin: 0; }
 <body>
 
 <main>
+  <button class="dw-link" id="dwLink" type="button" aria-haspopup="dialog" aria-expanded="false" title="Deep work timer">⏱ Deep work</button>
+  <div class="dw-panel" id="dwPanel" role="dialog" aria-label="Deep work" hidden>
+    <div class="dw-top"><p class="label">Deep work</p><button class="dw-close" id="dwClose" type="button" aria-label="Close">×</button></div>
+    <div class="dw-clock" id="dwClock" aria-live="off">0:00:00</div>
+    <div class="dw-btns">
+      <button class="primary" id="dwStart" type="button">Start</button>
+      <button class="ghost" id="dwLog" type="button" disabled>Log it</button>
+      <button class="link" id="dwDiscard" type="button" hidden>Discard this session</button>
+    </div>
+    <div class="dw-totals">
+      <div><b id="dwToday">0m</b><span>Today</span></div>
+      <div><b id="dwWeekTotal">0m</b><span>Last 7 days</span></div>
+      <div><b id="dwAvg">–</b><span>Daily avg</span></div>
+    </div>
+    <div class="dw-week" id="dwWeek" aria-label="Deep work over the last 7 days"></div>
+    <p class="hint" id="dwHint"></p>
+    <ul class="dw-sessions" id="dwSessions"></ul>
+  </div>
   <header>
     <h1>Habitle</h1>
     <p class="tagline">Build Habits. Share the Streak. Win the Day.</p>
@@ -317,6 +362,7 @@ function load() {
   if (!state || !state.days) state = { days: {} };
   if (!Array.isArray(state.todos)) state.todos = [];
   if (!Array.isArray(state.lists)) state.lists = [];
+  if (!Array.isArray(state.deep)) state.deep = [];
   ensureToday();
 }
 function ensureToday() {
@@ -620,7 +666,7 @@ async function pull() {
   if (ex && !Object.keys(server).length) state.days[todayKey()] = ex;
   ensureToday(); save(); render();
   if (localOnly.length) queueWrite(localOnly); else setSync('Saved to your account', 'ok');
-  todosDoc.pull(); listsDoc.pull();
+  todosDoc.pull(); listsDoc.pull(); deepDoc.pull();
 }
 // "Join N people…" line. Needs the user_count() function from setup.sql; stays hidden until it exists.
 async function showUserCount() {
@@ -707,7 +753,7 @@ function commit() { save(); render(); queueWrite([todayKey()]); }
 function saveNow() {
   if (!user) return;
   if (writeTimer) { clearTimeout(writeTimer); flush(); }
-  todosDoc.hurry(); listsDoc.hurry();
+  todosDoc.hurry(); listsDoc.hurry(); deepDoc.hurry();
 }
 
 // ---- To-do list: one-off tasks, separate from habits. They don't carry over or count toward any score.
@@ -970,6 +1016,84 @@ $('newListForm').addEventListener('submit', e => {
   listsDoc.commit(); renderLists(l.id);
 });
 
+// ---- Deep work: a stopwatch you open from the corner. Each logged session is saved as
+// { id, day, secs, end } and synced to the deep_work table (see setup.sql). The running timer itself
+// lives on this device only, as a start time plus banked seconds, so it survives a reload or a closed tab.
+const deepDoc = cloudDoc('deep_work', () => state.deep, v => { state.deep = v; }, renderDeep);
+let dw = { start: null, banked: 0 };
+try { dw = Object.assign(dw, JSON.parse(localStorage.getItem(KEY + '.timer'))); } catch (e) {}
+const saveDw = () => { try { localStorage.setItem(KEY + '.timer', JSON.stringify(dw)); } catch (e) {} };
+const dwElapsed = () => Math.floor(dw.banked + (dw.start ? (Date.now() - dw.start) / 1000 : 0));
+const clock = s => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+const dur = s => { const m = Math.round(s / 60); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`; };
+const dayOf = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+function deepByDay() { const m = {}; state.deep.forEach(x => { m[x.day] = (m[x.day] || 0) + x.secs; }); return m; }
+function tickDeep() {
+  const s = dwElapsed(), running = !!dw.start;
+  $('dwClock').textContent = clock(s);
+  $('dwPanel').classList.toggle('running', running);
+  const link = $('dwLink');
+  link.classList.toggle('running', running);
+  link.textContent = running || s ? `⏱ ${clock(s)}` : '⏱ Deep work';
+  $('dwStart').textContent = running ? 'Pause' : s ? 'Resume' : 'Start';
+  $('dwLog').disabled = s < 1; $('dwDiscard').hidden = s < 1;
+}
+function renderDeep() {
+  const byDay = deepByDay(), t = todayKey();
+  $('dwToday').textContent = dur(byDay[t] || 0);
+  const week = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d; });
+  const secs = week.map(d => byDay[dayOf(d)] || 0), max = Math.max(...secs, 1);
+  $('dwWeekTotal').textContent = dur(secs.reduce((a, b) => a + b, 0));
+  const days = Object.values(byDay).filter(Boolean);
+  $('dwAvg').textContent = days.length ? dur(days.reduce((a, b) => a + b, 0) / days.length) : '–';
+  $('dwWeek').replaceChildren(...week.map((d, i) => {
+    const col = document.createElement('div'); if (i === 6) col.className = 'today';
+    const bar = document.createElement('i'); if (!secs[i]) bar.className = 'zero';
+    bar.style.height = `${Math.max(secs[i] / max * 100, 3)}%`;
+    bar.title = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}: ${dur(secs[i])}`;
+    const lab = document.createElement('span'); lab.textContent = d.toLocaleDateString(undefined, { weekday: 'narrow' });
+    col.append(bar, lab); return col;
+  }));
+  const today = state.deep.filter(x => x.day === t).sort((a, b) => a.end - b.end);
+  $('dwSessions').replaceChildren(...today.map(x => {
+    const li = document.createElement('li');
+    const name = document.createElement('span'); name.className = 'name';
+    name.textContent = `Ended ${new Date(x.end).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+    const len = document.createElement('b'); len.textContent = dur(x.secs);
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+    del.setAttribute('aria-label', `Delete this ${dur(x.secs)} session`);
+    del.onclick = () => { state.deep = state.deep.filter(y => y !== x); deepDoc.commit(); };
+    li.append(name, len, del); return li;
+  }));
+  $('dwHint').textContent = (!state.deep.length ? 'Start the timer when you begin focused work, pause for breaks, and tap Log it when you\'re done. Each day\'s total is saved.' : '')
+    + (user && !deepDoc.ok ? ' Deep work is saved on this device for now.' : '');
+  $('dwHint').hidden = !$('dwHint').textContent.trim();
+  tickDeep();
+}
+function openDeep(open) {
+  $('dwPanel').hidden = !open; $('dwLink').setAttribute('aria-expanded', open);
+  if (open) renderDeep();
+}
+$('dwLink').onclick = () => openDeep($('dwPanel').hidden);
+$('dwClose').onclick = () => openDeep(false);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('dwPanel').hidden) openDeep(false); });
+document.addEventListener('pointerdown', e => { if (!$('dwPanel').hidden && !$('dwPanel').contains(e.target) && !$('dwLink').contains(e.target)) openDeep(false); });
+$('dwStart').onclick = () => {
+  if (dw.start) { dw.banked = dwElapsed(); dw.start = null; } else dw.start = Date.now();
+  saveDw(); tickDeep();
+};
+$('dwLog').onclick = () => {
+  const secs = dwElapsed(); if (secs < 1) return;
+  state.deep.push({ id: newId(), day: todayKey(), secs, end: Date.now() });
+  dw = { start: null, banked: 0 }; saveDw();
+  deepDoc.commit();
+};
+$('dwDiscard').onclick = () => {
+  if (!confirm(`Discard this ${dur(dwElapsed())} session without logging it?`)) return;
+  dw = { start: null, banked: 0 }; saveDw(); tickDeep();
+};
+setInterval(() => { if (dw.start) tickDeep(); }, 1000);
+
 // ---- Habits / To-do / My lists switch (remembered on this device)
 const TABS = { habits: ['tabHabits', 'habitsView'], todo: ['tabTodo', 'todoView'], lists: ['tabLists', 'listsView'] };
 function showTab(name) {
@@ -1016,7 +1140,7 @@ $('copyBtn').onclick = () => {
 let current = todayKey();
 setInterval(() => { if (todayKey() !== current) { current = todayKey(); ensureToday(); render(); } }, 60000);
 
-load(); pruneTodos(); save(); render(); renderTodos(); renderLists();
+load(); pruneTodos(); save(); render(); renderTodos(); renderLists(); renderDeep();
 setInterval(() => { if (pruneTodos()) commitTodos(); }, 60000);
 connect();
 </script>
