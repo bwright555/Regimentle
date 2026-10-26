@@ -602,7 +602,7 @@ function renderHistory() {
 // ---- Account sync (Supabase). Each signed-in person has one row per day in
 // regimen_days, readable and writable only by them (see setup.sql).
 const CFG = window.REGIMENTLE_CONFIG || {};
-let sb = null, user = null, authReady = false, writeTimer = null, writing = false;
+let sb = null, user = null, authReady = false, writeTimer = null, writing = false, dayRev = 0;
 // Changes not yet confirmed by the server are remembered on this device, so a reload, a closed tab or a
 // dropped connection can't let the older account copy overwrite them. They are pushed on the next sync.
 let pending = {};
@@ -620,7 +620,7 @@ function showAccount() {
 }
 function queueWrite(days) {
   if (offAccount()) return;
-  days.forEach(d => dirty.add(d)); markDays();
+  days.forEach(d => dirty.add(d)); markDays(); dayRev++;
   if (!user) return;
   setSync('Saving…');
   clearTimeout(writeTimer);
@@ -652,9 +652,11 @@ async function flush() {
 }
 async function pull() {
   if (!user || writeTimer || writing) return;
+  const startRev = dayRev;
   const { data, error } = await sb.from('regimen_days').select('day,tasks').eq('user_id', user.id);
   if (error) { console.error(error); setSync('Could not load your account. Showing what is saved on this device.', 'warn'); return; }
-  if (writeTimer || writing) return; // a change was made while loading; it wins and saves shortly
+  // a change was made while loading (even one that already finished saving): it wins, and the next sync catches up
+  if (writeTimer || writing || dayRev !== startRev) { todosDoc.pull(); listsDoc.pull(); deepDoc.pull(); return; }
   const server = {};
   data.forEach(r => { server[r.day] = { tasks: r.tasks, example: false }; });
   // days tracked on this device that the account doesn't have yet get uploaded,
@@ -771,6 +773,9 @@ function renderTodos() {
   cnt.append(Object.assign(document.createElement('b'), { textContent: open.length }), ` to do · `,
     Object.assign(document.createElement('b'), { textContent: doneToday }), ` done today`);
   const item = t => {
+    // a sync can swap in fresh copies of every to-do while this row is still on screen (it isn't redrawn
+    // during an edit), so each action works on the current copy, found by id
+    const cur = () => state.todos.find(x => x.id === t.id);
     const li = document.createElement('li'); if (t.done) li.className = 'hit';
     li.dataset.id = t.id;
     if (!t.done) {
@@ -784,6 +789,7 @@ function renderTodos() {
     const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'mark yes'; yes.textContent = '✓';
     yes.setAttribute('aria-label', t.done ? `Move "${t.text}" back to your list` : `Check off "${t.text}"`); yes.setAttribute('aria-pressed', !!t.done);
     yes.onclick = () => {
+      const t = cur(); if (!t) return renderTodos();
       t.done = !t.done; t.doneAt = t.done ? Date.now() : null;
       // coming back from Done when the flagged spots are full: it returns unflagged
       if (!t.done && t.flagged && flaggedCount() > MAX_FLAGGED) t.flagged = false;
@@ -796,6 +802,7 @@ function renderTodos() {
       flag.setAttribute('aria-label', t.flagged ? `Unflag "${t.text}"` : `Flag "${t.text}" as a top priority`);
       flag.title = t.flagged ? 'Unflag' : `Flag as a top priority (up to ${MAX_FLAGGED})`;
       flag.onclick = () => {
+        const t = cur(); if (!t) return renderTodos();
         if (!t.flagged && flaggedCount() >= MAX_FLAGGED) {
           alert(`You can flag up to ${MAX_FLAGGED} to-dos. Unflag one first to make room.`);
           return;
@@ -808,9 +815,9 @@ function renderTodos() {
     }
     const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
     del.setAttribute('aria-label', `Delete "${t.text}"`);
-    del.onclick = () => { state.todos = state.todos.filter(x => x !== t); commitTodos(); };
+    del.onclick = () => { state.todos = state.todos.filter(x => x.id !== t.id); commitTodos(); };
     li.append(name, when); if (flag) li.append(flag); li.append(yes, del);
-    const edit = () => editInPlace(name, t.text, v => { t.text = v; commitTodos(); });
+    const edit = () => editInPlace(name, t.text, v => { const c = cur(); if (c) c.text = v; commitTodos(); });
     name.title = t.done ? 'Tap to edit' : 'Tap to edit, drag to move';
     if (!t.done) { dragFrom(li.querySelector('.grip'), li, reorderTodos); dragFrom(name, li, reorderTodos, edit); }
     else name.onclick = edit;
@@ -837,7 +844,7 @@ function editInPlace(nameEl, text, save) {
     if (done) return; done = true;
     const v = inp.value.trim();
     inp.replaceWith(nameEl);
-    if (keep && v && v !== text) save(v);
+    if (keep && v && v !== text) save(v); else renderTodos(); // a sync may have landed while editing
   };
   inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') finish(false); };
   inp.onblur = () => finish(true);
@@ -942,8 +949,11 @@ function cloudDoc(table, get, set, after) {
   };
   doc.pull = async () => {
     if (!user || (loaded && (timer || writing))) return;
+    const startRev = rev;
     const { data, error } = await sb.from(table).select('items').eq('user_id', user.id).maybeSingle();
     if (error) { console.error(error); doc.ok = false; after(); return; }
+    // changed here while loading: this copy may predate that change, so skip it and let the change save
+    if (rev !== startRev) { doc.ok = true; if (!timer && !writing && pending[table]) doc.flush(); return; }
     doc.ok = true; loaded = true;
     const items = data && Array.isArray(data.items) ? data.items : [];
     if (timer || writing || pending[table] || (!data && get().length)) {
