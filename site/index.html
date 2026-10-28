@@ -73,6 +73,10 @@ li.hit .name { color: var(--muted); text-decoration: line-through; text-decorati
 .mark { width: 36px; height: 36px; padding: 0; font-size: 1.1rem; line-height: 1; border: 2px solid var(--line); background: transparent; color: var(--muted); }
 .mark[aria-pressed="true"].yes { background: var(--hit); border-color: var(--hit); color: #fff; }
 .mark[aria-pressed="true"].no { background: var(--miss); border-color: var(--miss); color: #fff; }
+.lock { width: 36px; height: 36px; padding: 0; font-size: .95rem; line-height: 1; border: 2px solid var(--line); background: transparent; color: var(--muted); filter: grayscale(1); opacity: .55; }
+.lock[aria-pressed="true"] { border-color: var(--accent); filter: none; opacity: 1; }
+#list .name { cursor: text; }
+li.private .name { font-style: italic; }
 .del { background: none; border: none; color: var(--muted); padding: 6px; font-size: 1.1rem; }
 .del:hover { color: var(--fg); }
 .hint { color: var(--muted); font-size: .9rem; margin: 0; }
@@ -324,6 +328,7 @@ body { margin: 0; }
   <section class="share">
     <p class="label">Share with friends</p>
     <pre id="shareText"></pre>
+    <p class="hint" id="privateNote" hidden></p>
     <div class="row">
       <button class="primary" id="copyBtn" type="button">Copy results</button>
     </div>
@@ -374,30 +379,32 @@ function ensureToday() {
     const prev = past.length ? state.days[past[past.length - 1]] : null;
     state.days[t] = !prev
       ? { tasks: EXAMPLES.map((text, i) => ({ text, done: i < 2 ? true : i === 2 ? false : null })), example: true }
-      : { tasks: prev.example ? [] : prev.tasks.map(x => ({ text: x.text, done: null })), example: false };
+      : { tasks: prev.example ? [] : prev.tasks.map(x => ({ text: x.text, done: null, ...(x.private ? { private: true } : {}) })), example: false };
   }
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 const today = () => state.days[todayKey()];
 
-function dayScore(day) {
-  const real = day.example ? [] : day.tasks;
+// shared: leave out private habits, for the text you send friends
+const visible = (tasks, shared) => shared ? tasks.filter(t => !t.private) : tasks;
+function dayScore(day, shared) {
+  const real = day.example ? [] : visible(day.tasks, shared);
   return { done: real.filter(t => t.done === true).length, total: real.length };
 }
-function career() {
+function career(shared) {
   let done = 0, total = 0;
-  for (const d of Object.values(state.days)) { const s = dayScore(d); done += s.done; total += s.total; }
+  for (const d of Object.values(state.days)) { const s = dayScore(d, shared); done += s.done; total += s.total; }
   return { done, total };
 }
-function streak() {
+function streak(shared) {
   // consecutive days, ending today or yesterday, where every task was done.
   // Yesterday's run only carries while today is still open; a ✕ today ends it.
   let n = 0; const d = new Date();
   const k = x => x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
-  const perfect = key => { const day = state.days[key]; if (!day) return false; const s = dayScore(day); return s.total > 0 && s.done === s.total; };
+  const perfect = key => { const day = state.days[key]; if (!day) return false; const s = dayScore(day, shared); return s.total > 0 && s.done === s.total; };
   if (!perfect(k(d))) {
     const t = state.days[k(d)];
-    if (t && !t.example && t.tasks.some(x => x.done === false)) return 0;
+    if (t && !t.example && visible(t.tasks, shared).some(x => x.done === false)) return 0;
     d.setDate(d.getDate() - 1);
   }
   while (perfect(k(d))) { n++; d.setDate(d.getDate() - 1); }
@@ -433,9 +440,10 @@ const sq = t => t.done === true ? '🟩' : t.done === false ? '⬛' : '⬜';
 
 const siteUrl = () => location.origin + location.pathname.replace(/index\.html$/, '');
 function shareText() {
-  const day = today(), tasks = day.tasks;
+  // private habits are tracked here but never appear in what you send
+  const day = today(), tasks = visible(day.tasks, true);
   const s = { done: tasks.filter(t => t.done === true).length, total: tasks.length };
-  const c = career();
+  const c = career(true);
   if (day.example) { c.done += s.done; c.total += s.total; }
   const lines = [`Habitle ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${s.done}/${s.total}`, ''];
   if (tasks.length) {
@@ -444,7 +452,7 @@ function shareText() {
     lines.push('');
   }
   lines.push(`Today: ${pct(s.done, s.total)} · Career: ${pct(c.done, c.total)} (${c.done}/${c.total})`);
-  const st = streak(); if (st > 1) lines.push(`⭐ ${st} perfect days in a row`);
+  const st = streak(true); if (st > 1) lines.push(`⭐ ${st} perfect days in a row`);
   // full https:// address so texting and chat apps turn it into a tappable link
   if (/^https?:$/.test(location.protocol)) lines.push(siteUrl());
   return lines.join('\n');
@@ -452,6 +460,9 @@ function shareText() {
 
 let lastTiles = '';
 function render() {
+  // a background sync must not wipe out a habit being renamed; it redraws once renaming ends
+  const editing = document.activeElement;
+  if (editing && editing.classList.contains('edit') && $('list').contains(editing)) return;
   const day = today(), tasks = day.tasks;
   $('date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -476,8 +487,10 @@ function render() {
   const list = $('list'); list.innerHTML = '';
   tasks.forEach((t, i) => {
     const li = document.createElement('li');
-    if (t.done === true) li.className = 'hit';
+    li.className = (t.done === true ? 'hit' : '') + (t.private ? ' private' : '');
     const name = document.createElement('span'); name.className = 'name'; name.textContent = t.text;
+    name.title = 'Tap to rename';
+    name.onclick = () => editInPlace(name, t.text, v => renameHabit(t.text, v), render, 'Rename habit');
     const n = day.example ? 0 : activityStreak(t.text);
     if (n > 1) {
       const f = document.createElement('span'); f.textContent = `🔥${n}`;
@@ -491,10 +504,15 @@ function render() {
     const no = document.createElement('button'); no.type = 'button'; no.className = 'mark no'; no.textContent = '✕';
     no.setAttribute('aria-label', `Mark "${t.text}" not done`); no.setAttribute('aria-pressed', t.done === false);
     no.onclick = () => { t.done = t.done === false ? null : false; commit(); };
+    const lock = document.createElement('button'); lock.type = 'button'; lock.className = 'lock'; lock.textContent = '🔒';
+    lock.setAttribute('aria-pressed', !!t.private);
+    lock.setAttribute('aria-label', t.private ? `Share "${t.text}" with friends again` : `Make "${t.text}" private`);
+    lock.title = t.private ? 'Private: tracked here, left out of what you share. Tap to share it again.' : 'Make private: keep tracking it, but leave it out of what you share';
+    lock.onclick = () => { if (t.private) delete t.private; else t.private = true; commit(); };
     const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
     del.setAttribute('aria-label', `Remove "${t.text}" from your habits`);
     del.onclick = () => { tasks.splice(i, 1); commit(); };
-    li.append(name, yes, no, del);
+    li.append(name); if (!day.example) li.append(lock); li.append(yes, no, del);
     list.appendChild(li);
   });
 
@@ -507,6 +525,9 @@ function render() {
     : 'Everything is marked for today. Copy your results below.';
 
   $('shareText').textContent = shareText();
+  const hidden = tasks.filter(t => t.private).length;
+  $('privateNote').hidden = !hidden;
+  $('privateNote').textContent = `🔒 ${hidden} private habit${hidden > 1 ? 's are' : ' is'} left out of this, and out of the Today and Career numbers you share.`;
   renderHistory();
   renderAllTime();
 }
@@ -754,6 +775,19 @@ $('signOut').onclick = async () => {
 };
 
 function commit() { save(); render(); queueWrite([todayKey()]); }
+// Rename a habit from today on. If it has history, you can carry its past days and streak over to the new name.
+function renameHabit(from, to) {
+  const day = today(), t = day.tasks.find(x => x.text === from);
+  if (!t) return render();
+  if (day.tasks.some(x => x !== t && x.text.trim().toLowerCase() === to.toLowerCase())) { alert(`You already have a habit called "${to}".`); return render(); }
+  const past = Object.keys(state.days).filter(k => k !== todayKey() && !state.days[k].example && state.days[k].tasks.some(x => x.text === from));
+  const carry = past.length && confirm(`Keep the history for "${from}" under "${to}"?\n\nOK: its ${past.length} past day${past.length > 1 ? 's' : ''} and streak move to the new name.\nCancel: start "${to}" fresh today, and "${from}" stays in your past habits.`);
+  t.text = to;
+  if (carry) {
+    past.forEach(k => state.days[k].tasks.forEach(x => { if (x.text === from) x.text = to; }));
+    save(); render(); queueWrite([todayKey(), ...past]);
+  } else commit();
+}
 function saveNow() {
   if (!user) return;
   if (writeTimer) { clearTimeout(writeTimer); flush(); }
@@ -836,15 +870,15 @@ function renderTodos() {
   if (user && !todosDoc.ok) $('todoHint').textContent = ($('todoHint').textContent + ' To-dos are saved on this device for now.').trim();
 }
 // Swap a row's text for an input. Enter or tapping away saves, Escape cancels.
-function editInPlace(nameEl, text, save) {
+function editInPlace(nameEl, text, save, redraw = renderTodos, label = 'Edit to-do') {
   const inp = document.createElement('input');
-  inp.className = 'edit'; inp.value = text; inp.maxLength = 120; inp.setAttribute('aria-label', 'Edit to-do');
+  inp.className = 'edit'; inp.value = text; inp.maxLength = 120; inp.setAttribute('aria-label', label);
   let done = false;
   const finish = keep => {
     if (done) return; done = true;
     const v = inp.value.trim();
     inp.replaceWith(nameEl);
-    if (keep && v && v !== text) save(v); else renderTodos(); // a sync may have landed while editing
+    if (keep && v && v !== text) save(v); else redraw(); // a sync may have landed while editing
   };
   inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') finish(false); };
   inp.onblur = () => finish(true);
